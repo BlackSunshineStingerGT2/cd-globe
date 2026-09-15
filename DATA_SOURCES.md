@@ -15,7 +15,7 @@ How to read this:
 
 | Source                                                                | Used for                                                                                                                            | License / terms                                                                                                                                                                                                                                                                                                                                       | Attribution                                                                                                                                 |
 | --------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **NOAA GFS (wind)** | Global 10 m wind field for the animated Wind layer | U.S. public domain (NOAA); keyless via NOAA Open Data on AWS | "NOAA Global Forecast System (GFS)" (courtesy; not an endorsement) |
+| **NOAA GFS (wind)** | Global 10 m wind, optional 2 m temperature and mean sea-level pressure for Wind | U.S. public domain (NOAA); keyless via NOAA Open Data on AWS | "NOAA Global Forecast System (GFS)" (courtesy; not an endorsement) |
 | **OpenStreetMap ALPR camera locations** (including DeFlock community mapping) | Optional mapped automatic license-plate-reader camera layer | [ODbL 1.0](https://opendatacommons.org/licenses/odbl/1-0/); commercial use permitted with applicable attribution and database share-alike obligations | [© OpenStreetMap contributors](https://www.openstreetmap.org/copyright); [DeFlock](https://deflock.org) community mapping |
 | **Google Map Tiles API** (Photorealistic 3D Tiles) + Places/Geocoding | The 3D globe, voice scene context, and on-demand nearby installation search                                                         | Google Maps Platform ToS (proprietary, your own key + billing)                                                                                                                                                                                                                                                                                        | "Google" / "Google Maps" logo — **shown in-app**, required                                                                                  |
 | **OpenSky Network**                                                   | Primary worldwide live-flight snapshot                                                                                              | Non-commercial research/education license                                                                                                                                                                                                                                                                                                             | Schäfer et al., _"Bringing Up OpenSky"_, IPSN 2014 + opensky-network.org                                                                    |
@@ -156,21 +156,39 @@ The former bundled 2026-05-25 snapshot was removed 2026-07-16.
 
 ### ECMWF IFS wind
 
-Wind also offers ECMWF IFS 10 m forecasts from the keyless [ECMWF Open Data](https://www.ecmwf.int/en/forecasts/datasets/open-data) service. The proxy reads its JSON Lines inventory and fetches only 10u/10v GRIB messages, resampling the forecast to the display grid. Data is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The [ECMWF Terms of Use](https://apps.ecmwf.int/datasets/licences/general/) also apply. In-app attribution identifies this service as based on ECMWF data and products, links the CC BY 4.0 licence, identifies resampling and animation as modifications, and retains the required ECMWF liability disclaimer. Both model issue time and the selected forecast valid time appear in the layer row. These are model forecasts, not observations.
+Wind also offers ECMWF IFS 10 m forecasts from the keyless [ECMWF Open Data](https://www.ecmwf.int/en/forecasts/datasets/open-data) service. The proxy reads its JSON Lines inventory and byte-range fetches 10u/10v GRIB messages, optionally adding 2t (2 m temperature) or msl (mean sea-level pressure) from the same run and forecast time. It resamples these fields to the approximately 1° display grid. Data is licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The [ECMWF Terms of Use](https://apps.ecmwf.int/datasets/licences/general/) also apply. In-app attribution identifies this service as based on ECMWF data and products, links the CC BY 4.0 licence, identifies resampling and animation as modifications, and retains the required ECMWF liability disclaimer. Both model issue time and the selected forecast valid time appear in the layer row. These are model forecasts, not observations.
 
 ### NOAA GFS wind
 
 The optional **Wind** layer animates the global 10 m wind field from NOAA's
 Global Forecast System (GFS). The `/api/wind` server-side proxy selects the
 latest available 0.25° cycle, reads its `.idx` inventory, byte-range fetches only
-the `UGRD`/`VGRD` 10 m GRIB2 messages (≈1 MB each instead of the whole ~500 MB
-file), decodes them with ecCodes (WASM), resamples to a compact grid (1° by
-default), and serves a manifest plus a Float32 U/V payload. It is keyless, cached
+the `UGRD`/`VGRD` 10 m GRIB2 messages, optionally adding `TMP` at 2 m or
+`PRMSL` at mean sea level from the same run and forecast time. It decodes the
+selected messages with ecCodes (WASM), resamples to a compact grid (1° by
+default), and serves a manifest plus Float32 U/V and optional scalar values. It is keyless, cached
 per cycle for an hour, and is a **forecast, not an observation**: the particles
-show model flow, not measured wind. Rendering is a 2D canvas particle overlay
-advected by the field and projected through the Cesium camera; globe-occluded
-particles are skipped. NOAA GFS data is U.S. public domain; the credit above is a
-courtesy and does not imply endorsement.
+show model flow, not measured wind. The renderer bakes bounded curves through
+the sampled field and animates their phase on the GPU, with a canvas fallback.
+Any display lift is a visual aid and does not change the forecast's 10 m level.
+NOAA GFS data is U.S. public domain; the credit above is a courtesy and does not
+imply endorsement.
+
+For both models, optional temperature is normalized from K to °C and pressure
+from Pa to hPa before delivery. A missing, malformed or timed-out companion field
+does not discard valid wind: the manifest marks that field unavailable, and the
+UI retains wind without inventing scalar values. The proxy caches by model and
+requested field, with bounded current/previous grids and shared in-flight loads.
+Wind speed shading is computed locally from U/V and needs no companion download.
+The legend and map-center reading explain units and forecast validity; the
+animation is a visual flow through one forecast, not advancing forecast time.
+Optional globe relief uses existing terrain vertex normals for view lighting;
+without those normals it shades global globe curvature only, not local terrain
+relief. Neither mode represents measured sunlight or a new elevation source.
+This Wind prototype adds no cloud-volume or radar data. Mapped.earth's public
+bundles were studied for rendering ideas, but
+no code or assets were reused and no application licence granting reuse was
+found. Its presentation is not a weather-data source for this implementation.
 
 ### Natural Earth physical regions (`natural_earth/`)
 

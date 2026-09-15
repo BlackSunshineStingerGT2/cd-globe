@@ -1,0 +1,71 @@
+/* Weather controls form four stable rows: model, field, units, inspection. */
+[data-layer-id='wind'] .data-toggle-controls:not([hidden]) {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+  margin-left: 0;
+  padding-left: 0;
+  margin-top: 9px;
+}
+[data-layer-id='wind'] .data-toggle-chip {
+  grid-column: span 2;
+  color: #a9b8bc;
+  letter-spacing: 0.5px;
+  padding-inline: 3px;
+}
+[data-layer-id='wind'] [data-chip-id^='overlay-'] {
+  grid-column: span 3;
+}
+[data-layer-id='wind'] .data-toggle-chip.active {
+  color: #70f0ff;
+}
+[data-layer-id='wind'] .data-toggle-chip:disabled {
+  opacity: 0.45;
+}
+[data-layer-id='wind'] .data-toggle-controls-info {
+  grid-column: 1 / -1;
+}
+[data-layer-id='wind'] .data-toggle-legend-item {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
+  min-width: 0;
+  margin-top: 7px;
+  color: #b9ccd0;
+  font-size: 9px;
+  text-align: center;
+}
+[data-layer-id='wind'] .data-toggle-legend-swatch {
+  width: 100%;
+  height: 4px;
+  border-radius: 1px;
+}
+/* Weather is one optional instrument within the existing layer panel. */
+[data-layer-id='wind'] .data-toggle-controls-info {
+  white-space: pre-line;
+  line-height: 1.6;
+  font-size: 10px;
+  color: #b9ccd0;
+  margin-top: 7px;
+}
+[data-layer-id='wind'] .data-toggle-chip {
+  min-height: 30px;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+}
+[data-layer-id='wind'] .data-toggle-chip:focus-visible {
+  outline: 2px solid #89e5e5;
+  outline-offset: 2px;
+}
+[data-layer-id='wind'] [data-chip-id='inspect-center'] {
+  grid-column: 1 / -1;
+  text-align: center;
+  min-height: 36px;
+}
+@media (max-width: 600px) {
+  [data-layer-id='wind'] .data-toggle-chip {
+    min-height: 40px;
+  }
+}

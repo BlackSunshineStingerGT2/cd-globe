@@ -207,6 +207,19 @@ function integerOption(key, token, defaultValue) {
 const OPTION_GROUPS = Object.freeze({
   wind: Object.freeze([
     enumOption('model', 'm', 'gfs', ['gfs', 'ifs'], { gfs: 'g', ifs: 'i' }),
+    enumOption(
+      'overlay',
+      'o',
+      'speed',
+      ['none', 'speed', 'temperature', 'pressure'],
+      { none: 'n', speed: 's', temperature: 't', pressure: 'p' },
+    ),
+    enumOption('units', 'u', 'km/h', ['km/h', 'm/s', 'mph'], {
+      'km/h': 'k',
+      'm/s': 'm',
+      mph: 'i',
+    }),
+    booleanOption('paused', 'p', false),
   ]),
   flights: Object.freeze([
     // Owner directive 2026-08-22: the fleet's 3D models are DEFAULT-ON in

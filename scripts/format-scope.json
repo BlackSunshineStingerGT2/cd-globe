@@ -735,5 +735,6 @@
   "src/sources/overpassFeatures.test.mjs",
   "src/data/cctvHlsStream.test.mjs",
   "src/layers/cctv/videoPlayback.test.mjs",
-  "src/ui/cctvVideo.test.mjs"
+  "src/ui/cctvVideo.test.mjs",
+  "src/ui/styles/weather.css"
 ]

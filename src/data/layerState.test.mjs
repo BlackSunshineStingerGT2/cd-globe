@@ -1604,3 +1604,36 @@ test('the owner layer going away revokes the pending watch at any origin', async
     f.coordinator.destroy();
   }
 });
+
+test('wind appearance shares round trip while old links retain weather defaults', () => {
+  const state = normalizeLayerState({
+    enabledLayerIds: ['wind'],
+    options: {
+      wind: { model: 'ifs', overlay: 'pressure', units: 'mph', paused: true },
+    },
+  });
+  assert.deepEqual(
+    decodeLayerStateParams(new URLSearchParams(encode(state))).options.wind,
+    { model: 'ifs', overlay: 'pressure', units: 'mph', paused: true },
+  );
+  const defaults = createDefaultLayerState().options.wind;
+  assert.deepEqual(defaults, {
+    model: 'gfs',
+    overlay: 'speed',
+    units: 'km/h',
+    paused: false,
+  });
+  const old = normalizeLayerState({ options: { wind: { model: 'ifs' } } });
+  assert.deepEqual(old.options.wind, { ...defaults, model: 'ifs' });
+  const invalid = normalizeLayerState({
+    options: {
+      wind: {
+        model: 'unknown',
+        overlay: 'clouds',
+        units: '<script>',
+        paused: 'yes',
+      },
+    },
+  });
+  assert.deepEqual(invalid.options.wind, defaults);
+});

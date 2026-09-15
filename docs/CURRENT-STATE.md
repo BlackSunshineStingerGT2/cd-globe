@@ -1,6 +1,47 @@
 # God's Eye View Current State
 
-Wind appears in the Weather group before Utilities and is an optional GFS 10 m forecast overlay. Source acquisition has deadline and body budgets, disconnect cancellation and one-minute failure backoff. The row distinguishes model issue time from forecast valid time. Animation starts only with a field, stops on disable/destruction, preserves trails between unchanged canvas dimensions and scales from 200 to 4,000 particles with viewport area. Application catalog construction owns each instance.
+Wind appears in the Weather group before Utilities. The surface-weather prototype
+uses keyless NOAA GFS or ECMWF IFS forecasts on an approximately 1° display grid.
+It defaults to 10 m wind trails with speed shading computed from the U/V field.
+The same row selects Trails, Speed, Pressure or Temp, switches wind units between
+km/h, m/s and mph, pauses motion, and opens **Inspect center**. That dismissible
+reading reports the sampled map-center coordinates, interpolated wind speed and
+meteorological direction, selected scalar, model, valid time and freshness; it
+clears when the model/field changes or a refresh begins. The row separately shows
+issue and valid times. Animation moves through a fixed forecast; it does not
+advance forecast time.
+
+Temperature is air temperature at 2 m in °C; pressure is mean sea-level pressure
+in hPa. Optional companion fields come from the same model run/forecast as the
+wind. A missing or invalid companion leaves usable wind visible and identifies
+the selected field as unavailable. The color texture drapes the globe basemap;
+photorealistic 3D tiles may cover it. GPU wind curves follow the sampled forecast
+field. Their 12 km display lift is a rendering aid; the source remains 10 m wind,
+not a forecast at the displayed height or a street-level observation.
+
+The renderer owns field installation, scalar imagery and the animation lifecycle.
+It bakes at most 3,600 curves (1,200 below 700 px) with at most 33 geographic points each on the CPU
+when installing a wind field, then advances a GPU phase along those curves
+without CPU projection of every point on every frame. A canvas renderer remains
+available as a fallback. Pause and reduced-motion mode show a static flow view
+without an idle animation loop; hidden tabs suspend animation, and
+disable/destruction releases owned rendering
+resources and subscriptions. The globe relief helper is enabled with Wind and
+released when Wind is disabled. It uses terrain vertex normals
+for view-directed shading, falling back to global globe-curvature shading when
+normals are unavailable; the fallback does not show local hillshade. Neither mode
+adds elevation data or represents sunlight. Relief declines to replace an
+existing globe material, restores the prior empty material only while still
+owning it, and leaves later owners intact.
+Source acquisition retains deadlines, body budgets, disconnect cancellation,
+per-model/field singleflight caching and one-minute failure backoff. Application
+catalog construction owns each instance.
+
+This Wind prototype adds no cloud volume, radar or forecast-time playback.
+Mapped.earth's public bundles informed the rendering study; no code or assets
+were reused, and the study found no application licence granting reuse. Native
+hardware GPU behavior remains unverified; software-rendered checks do not
+establish native GPU performance or compatibility.
 
 Voice and HUD snapshots reuse the existing feedState classifier. Analyst follow-ups retain their original data provenance; current-view results append provenance without replacing legacy fields. HUD context and deterministic telemetry include non-nominal feed state.
 
@@ -3914,4 +3955,4 @@ closed. Performance and live agency reliability require recorded validation.
 
 ## Wind forecast models
 
-Wind supports selectable GFS/IFS models with persisted model choice. Each fetch chooses the available cycle and forecast step nearest the current time; rows show both issue and valid UTC timestamps. Grid identities include model, cycle and forecast step. Per-model caches retain the last two issued grids for manifest/grid rollover, coalesce concurrent requests, retain last-good data on failures and retry no faster than once per minute. Model changes clear the old field immediately, cancel old acquisition and ignore superseded results.
+Wind supports selectable GFS/IFS models with persisted model choice. Each fetch chooses the available cycle and forecast step nearest the current time; rows show both issue and valid UTC timestamps. Grid identities include model, cycle, forecast step and any requested scalar field. The six model/field cache slots each retain the last two issued grids for manifest/grid rollover, coalesce concurrent requests, retain last-good data on failures and retry no faster than once per minute. Model changes clear the old field immediately, cancel old acquisition and ignore superseded results.

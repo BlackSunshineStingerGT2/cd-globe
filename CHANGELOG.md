@@ -1,5 +1,16 @@
 # Changelog
 
+- Expand Wind into a surface-weather prototype: globe-draped speed shading,
+  optional same-run 2 m temperature and mean sea-level pressure, GFS/ECMWF model
+  selection, a numeric legend, wind units, Pause, and a dismissible map-center
+  reading. Keep wind visible when an optional field is unavailable; respect
+  reduced motion and stop animation while hidden or disabled. Bake bounded
+  forecast-following curves once per field and animate their phase on the GPU,
+  with a canvas fallback and globe view lighting owned only while Wind is enabled.
+  Display lift does not
+  change the 10 m forecast level; this adds no cloud volume, radar or forecast-time
+  playback. Native hardware GPU behavior remains unverified.
+
 Add feed provenance to analyst/view answers and HUD context while retaining existing response fields and runner ownership (Matt Van Horn, #347).
 
 Analyst records for loaded satellites, datacenters and dams, with explicit bounded count/rank coverage (Matt Van Horn, #351).
