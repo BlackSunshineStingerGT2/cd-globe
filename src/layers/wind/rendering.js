@@ -1,4 +1,5 @@
 import { createWindRelief } from './relief.js';
+import { orderWeatherImagery } from '../weather/imageryOrder.js';
 import { createWindGpuRendering } from './gpuRendering.js';
 import { advectParticle, sampleWind } from './model.js';
 import {
@@ -6,6 +7,28 @@ import {
   trailEraseAlpha,
   windTrailColor,
 } from './fields.js';
+
+// Snapshots own immutable decoded arrays. Compare their contents, not grid URLs
+// (which include the scalar overlay) or only cycle IDs (which can be revised).
+// This bounded scan runs on acquisition, never in the animation loop.
+function sameWind(previous, next, previousField, nextField) {
+  if (!previous || !next || !previousField || !nextField) return false;
+  for (const key of ['model', 'level', 'units'])
+    if (previous[key] !== next[key]) return false;
+  for (const key of ['runIso', 'validIso', 'forecastHour', 'date', 'hour'])
+    if (previous.cycle?.[key] !== next.cycle?.[key]) return false;
+  for (const key of ['nx', 'ny', 'lo1', 'la1', 'dx', 'dy'])
+    if (previousField[key] !== nextField[key]) return false;
+  for (const key of ['u', 'v']) {
+    const before = previousField[key];
+    const after = nextField[key];
+    if (!before || !after || before.length !== after.length) return false;
+    if (before === after) continue;
+    for (let i = 0; i < before.length; i++)
+      if (before[i] !== after[i]) return false;
+  }
+  return true;
+}
 
 /** Globe-projected surface flow plus one owned, static Cesium imagery field. */
 export function createWindRendering({
@@ -265,8 +288,11 @@ export function createWindRendering({
         rectangle: cesium.Rectangle.MAX_VALUE,
       });
       imagery = collection.addImageryProvider(provider);
+      orderWeatherImagery(collection, imagery, 0);
       imageryCollection = collection;
-      imagery.alpha = 0.85;
+      // Temperature colors carry quantitative meaning; double transparency
+      // blends orange heat into blue ocean and obscures useful gradients.
+      imagery.alpha = overlay === 'temperature' ? 1 : 0.85;
       imageryErrorRemove = provider.errorEvent?.addEventListener(() => {
         imageryError = 'Globe field image unavailable';
       });
@@ -505,17 +531,28 @@ export function createWindRendering({
       container.appendChild(canvas);
     },
     setField(next) {
+      const nextField = next?.grid
+        ? { ...next.grid, u: next.u, v: next.v }
+        : next;
+      const viewer = viewerReady();
+      const nextNarrow = (viewer?.scene?.canvas?.clientWidth || 800) < 700;
+      const reuseGeometry =
+        gpuActive &&
+        gpuNarrow === nextNarrow &&
+        gpu.supported() &&
+        sameWind(snapshot, next, field, nextField);
       snapshot = next;
-      field = next?.grid ? { ...next.grid, u: next.u, v: next.v } : next;
+      field = nextField;
       cameraChanged = true;
       lastTime = null;
       cancel();
       if (canvas && field) {
-        const viewer = viewerReady();
-        gpuNarrow = (viewer?.scene?.canvas?.clientWidth || 800) < 700;
-        gpuActive = gpu.supported() && gpu.setField(field);
-        reportedGpuReady = gpuActive ? gpu.getDiagnostics().ready : null;
-        flowTime = 0;
+        gpuNarrow = nextNarrow;
+        if (!reuseGeometry) {
+          gpuActive = gpu.supported() && gpu.setField(field);
+          reportedGpuReady = gpuActive ? gpu.getDiagnostics().ready : null;
+          flowTime = 0;
+        }
         clearPixels();
         particles = [];
         if (viewer && !gpuActive) {

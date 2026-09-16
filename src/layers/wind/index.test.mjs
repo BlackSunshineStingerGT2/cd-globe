@@ -327,3 +327,68 @@ test('renderer readiness pushes fresh loading stats and controls to the displaye
   assert.doesNotMatch(displayed.info, /Preparing globe flow/);
   layer.destroy();
 });
+
+test('weather summary describes the selected forecast and count remains numeric', async () => {
+  const { layer } = harness({ getSnapshot: async () => complete('gfs') });
+  await layer.update();
+  assert.equal(typeof layer.getStats().count, 'number');
+  assert.equal(layer.getStats().countLabel, 'Forecast');
+  const summary = layer.getRowControls().summary;
+  assert.equal(summary.label, 'Wind motion');
+  assert.equal(summary.units, 'km/h');
+  assert.match(summary.detail, /GFS forecast.*UTC/);
+  assert.equal((summary.detail.match(/UTC/g) || []).length, 1);
+  assert.equal(layer.getRowControls().chips.find(c => c.id === 'overlay-temperature').label, 'Temperature');
+  layer.destroy();
+});
+
+test('inspection marker clears with dismissal, changed fields/units/models and disable', async () => {
+  const nodes = [];
+  let listener;
+  let dismiss;
+  let reading;
+  const container = {
+    ownerDocument: { createElement: () => ({ style: {}, setAttribute() {}, remove() { nodes.splice(nodes.indexOf(this), 1); } }) },
+    appendChild(node) { nodes.push(node); },
+    getBoundingClientRect: () => ({ left: 0, top: 0 }),
+  };
+  const viewer = {
+    container,
+    camera: { positionWC: {}, pickEllipsoid: () => ({ longitude: 0, latitude: 0 }) },
+    scene: {
+      mode: 3,
+      canvas: { clientWidth: 800, clientHeight: 600, getBoundingClientRect: () => ({ left: 0, top: 0 }) },
+      cartesianToCanvasCoordinates: () => ({ x: 400, y: 300 }),
+      postRender: { addEventListener(fn) { listener = fn; return () => { listener = null; }; } },
+      requestRender() {},
+    },
+  };
+  const rendering = Object.fromEntries(['attach', 'start', 'stop', 'clear', 'destroy', 'setField'].map(name => [name, () => {}]));
+  const layer = createWindLayer({
+    feed: { getSnapshot: async () => complete('gfs') },
+    cesium: {
+      Cartesian2: class {}, Ellipsoid: { WGS84: {} }, SceneMode: { SCENE3D: 3 },
+      Cartographic: { fromCartesian: point => point }, Math: { toDegrees: value => value },
+      EllipsoidalOccluder: class { isPointVisible() { return true; } },
+    },
+    createRendering: () => rendering,
+    createPresentation(options) {
+      dismiss = options.onClose;
+      return { show(value) { reading = value; }, hide() {}, destroy() {} };
+    },
+  });
+  layer.init(viewer);
+  layer.enable();
+  await layer.update();
+  for (const change of [() => dismiss(), () => layer.setParams({ units: 'mph' }), () => layer.setParams({ overlay: 'speed' }), () => layer.setParams({ model: 'ifs' }), () => layer.disable()]) {
+    layer.setParams({ inspect: true });
+    assert.equal(nodes.length, 1);
+    assert.equal(reading.coordinates, '0.00°N · 0.00°E');
+    change();
+    assert.equal(nodes.length, 0);
+    assert.equal(listener, null);
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+  layer.destroy();
+});

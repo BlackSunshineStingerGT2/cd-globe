@@ -121,7 +121,12 @@ export class LayerBindings {
     for (const layer of this._weatherShellModules)
       layer.attachShellServices?.(null);
     this._weatherShellModules = [];
-    for (const id of ['weather-radar', 'weather-satellite']) {
+    for (const id of [
+      'weather-radar',
+      'weather-satellite',
+      'weather-lightning',
+      'weather-cyclones',
+    ]) {
       const layer = this._dataManager?.layers?.get(id)?.module;
       if (typeof layer?.attachShellServices !== 'function') continue;
       layer.attachShellServices({

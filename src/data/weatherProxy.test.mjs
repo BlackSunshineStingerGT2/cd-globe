@@ -13,6 +13,7 @@ const NAMES = [
   'conus_base_reflectivity_mosaic',
   'global_longwave_imagery_mosaic',
   'goes_longwave_imagery',
+  'ldn_lightning_strike_density',
 ];
 function leaf(
   name,
@@ -75,6 +76,38 @@ function fakeFetch(calls = []) {
 }
 const body = (res) => JSON.parse(res.body);
 const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+
+test('lightning density uses a fixed observed WMS product with attribution and ten-minute metadata TTL', async () => {
+  let clock = NOW;
+  const calls = [];
+  const { request } = install({
+    now: () => clock,
+    fetchImpl: fakeFetch(calls),
+  });
+  const manifest = body(await request('/manifest?product=lightning'));
+  assert.equal(manifest.product, 'lightning');
+  assert.match(manifest.title, /density/);
+  assert.match(manifest.description, /not individual GLM flashes/);
+  assert.match(manifest.coverage, /not global/);
+  assert.match(manifest.attribution, /Vaisala/);
+  assert.equal(manifest.observedAt, TIME);
+  assert.equal(manifest.imageUrl, undefined);
+  assert.equal((await request(tile({ product: 'lightning' }))).statusCode, 200);
+  const map = calls[1].url;
+  assert.equal(map.origin, 'https://nowcoast.noaa.gov');
+  assert.equal(map.pathname, '/geoserver/observations/lightning_detection/ows');
+  assert.equal(map.searchParams.get('layers'), NAMES[3]);
+  assert.equal(map.searchParams.get('styles'), 'lightning_density');
+  assert.equal(map.searchParams.get('time'), TIME);
+  assert.equal(map.searchParams.get('width'), '256');
+  clock += 599_000;
+  await request('/manifest?product=lightning');
+  assert.equal(calls.length, 2);
+  clock += 2000;
+  await request('/manifest?product=lightning');
+  assert.equal(calls.length, 3);
+  assert.equal((await request(wholeImage(TIME, 'lightning'))).statusCode, 400);
+});
 
 test('capabilities select exact leaves and preserve irregular observation times', () => {
   const older = '2026-09-16T02:04:14.000Z';

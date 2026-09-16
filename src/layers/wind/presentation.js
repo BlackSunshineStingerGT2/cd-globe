@@ -2,7 +2,7 @@ const CARD_CSS = `
 .gev-wind-reading {
   position: absolute; right: 16px; bottom: 112px; z-index: 220;
   box-sizing: border-box; width: min(280px, calc(100% - 24px));
-  max-height: calc(100% - 140px); overflow-y: auto;
+  max-height: calc(100% - 140px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #58717d transparent;
   padding: 16px; border: 1px solid rgba(105, 216, 231, .45);
   border-radius: 12px; background: rgba(7, 22, 31, .96);
   color: #e8f4f7; box-shadow: 0 8px 28px rgba(0, 0, 0, .3);
@@ -22,6 +22,10 @@ const CARD_CSS = `
 .gev-wind-reading__context { margin: 3px 0 0; color: #a7bec8; font-size: 11px; }
 .gev-wind-reading__coordinates { margin: 4px 0 14px; font-variant-numeric: tabular-nums; }
 .gev-wind-reading__wind { margin: 0; font-size: 25px; line-height: 1.2; font-weight: 650; }
+.gev-wind-reading[data-scalar="true"] .gev-wind-reading__wind { margin-top: 10px; font-size: 15px; font-weight: 400; }
+.gev-wind-reading[data-scalar="true"] .gev-wind-reading__scalar { display: flex; flex-direction: column; margin: 0; }
+.gev-wind-reading[data-scalar="true"] .gev-wind-reading__scalar-value { font-size: 25px; line-height: 1.2; font-weight: 650; }
+.gev-wind-reading[data-scalar="true"] .gev-wind-reading__scalar-label { font-size: 12px; margin-bottom: 4px; }
 .gev-wind-reading__scalar { margin: 10px 0 0; font-size: 15px; }
 .gev-wind-reading__scalar-label { color: #a7bec8; margin-right: 8px; }
 .gev-wind-reading__metadata { margin-top: 14px; padding-top: 10px; border-top: 1px solid #29424d; }
@@ -29,7 +33,7 @@ const CARD_CSS = `
 .gev-wind-reading__status { color: #9ce4ee; font-weight: 600; }
 .gev-wind-reading__explanation { margin: 10px 0 0; color: #a7bec8; font-size: 12px; }
 @media (max-width: 480px) {
-  .gev-wind-reading { right: 12px; bottom: 104px; padding: 12px; }
+  .gev-wind-reading { right: 12px; bottom: calc(2vh + 8rem); padding: 12px; max-height: min(30svh, calc(100% - 140px)); }
 }
 `;
 
@@ -80,8 +84,8 @@ export function createWindPresentation({ container, onClose = () => {} } = {}) {
     header,
     context,
     coordinates,
-    wind,
     scalar,
+    wind,
     metadata,
     explanation,
   ]) {
@@ -121,6 +125,7 @@ export function createWindPresentation({ container, onClose = () => {} } = {}) {
       text(scalarLabel, reading.scalarLabel);
       text(scalarValue, reading.scalarValue);
       scalar.hidden = scalarValue.hidden;
+      card.setAttribute('data-scalar', String(!scalarValue.hidden));
       text(model, reading.model);
       text(validTime, reading.validTime ? `Valid ${reading.validTime}` : '');
       text(status, reading.status);

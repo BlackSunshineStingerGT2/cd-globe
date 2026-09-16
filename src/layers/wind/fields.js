@@ -162,7 +162,7 @@ export function createFieldRaster(snapshot, kind, width = 360, height = 181) {
           ? 0.22 + 0.43 * Math.sqrt(t)
           : kind === 'pressure'
             ? 0.24 + 0.3 * Math.min(1, Math.abs(value - 1013) / 40)
-            : 0.9;
+            : 0.95;
       rgba[offset + 3] = Math.round(255 * alpha);
       finiteCount++;
     }

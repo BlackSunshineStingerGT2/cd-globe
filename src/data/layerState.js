@@ -168,7 +168,14 @@ function stringOption(key, token, defaultValue) {
   });
 }
 
-function enumOption(key, token, defaultValue, values, codes) {
+function enumOption(
+  key,
+  token,
+  defaultValue,
+  values,
+  codes,
+  { absentValue = defaultValue } = {},
+) {
   const reverse = Object.fromEntries(
     Object.entries(codes).map(([name, code]) => [code, name]),
   );
@@ -176,6 +183,7 @@ function enumOption(key, token, defaultValue, values, codes) {
     key,
     token,
     defaultValue,
+    absentValue,
     normalize: (value) => normalizeEnum(values, value),
     encode: (value) => codes[value],
     decode: (value) => reverse[value] || null,
@@ -205,6 +213,12 @@ function integerOption(key, token, defaultValue) {
 }
 
 const OPTION_GROUPS = Object.freeze({
+  'weather-lightning': Object.freeze([
+    enumOption('opacity', 'o', 'strong', ['light', 'strong'], {
+      light: 'l',
+      strong: 's',
+    }),
+  ]),
   'weather-radar': Object.freeze([
     enumOption('opacity', 'o', 'strong', ['light', 'strong'], {
       light: 'l',
@@ -229,9 +243,10 @@ const OPTION_GROUPS = Object.freeze({
     enumOption(
       'overlay',
       'o',
-      'speed',
+      'none',
       ['none', 'speed', 'temperature', 'pressure'],
       { none: 'n', speed: 's', temperature: 't', pressure: 'p' },
+      { absentValue: 'speed' },
     ),
     enumOption('units', 'u', 'km/h', ['km/h', 'm/s', 'mph'], {
       'km/h': 'k',
@@ -419,6 +434,17 @@ export const LAYER_STATE_REGISTRY = Object.freeze([
   }),
   Object.freeze({ id: 'traffic', token: 't', disposition: 'enabled-only' }),
   Object.freeze({ id: 'transit', token: 'j', disposition: 'enabled-only' }),
+  Object.freeze({
+    id: 'weather-cyclones',
+    token: 'y',
+    disposition: 'enabled-only',
+  }),
+  Object.freeze({
+    id: 'weather-lightning',
+    token: 'l',
+    disposition: 'enabled+options',
+    optionOwner: 'weather-lightning',
+  }),
   Object.freeze({
     id: 'weather-radar',
     token: 'v',

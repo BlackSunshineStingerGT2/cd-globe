@@ -2,8 +2,8 @@
 
 Wind appears in the Weather group before Utilities. The surface-weather prototype
 uses keyless NOAA GFS or ECMWF IFS forecasts on an approximately 1° display grid.
-It defaults to 10 m wind trails with speed shading computed from the U/V field.
-The same row selects Trails, Speed, Pressure or Temp, switches wind units between
+It defaults to 10 m wind trails over the existing basemap. Speed shading is an explicit choice; earlier v2 links retain their original speed-shading meaning.
+The same row selects No color field, Speed, Pressure or Temperature, switches wind units between
 km/h, m/s and mph, pauses motion, and opens **Inspect center**. That dismissible
 reading reports the sampled map-center coordinates, interpolated wind speed and
 meteorological direction, selected scalar, model, valid time and freshness; it
@@ -43,6 +43,37 @@ Mapped.earth's public bundles informed the rendering study; no code or assets
 were reused, and the study found no application licence granting reuse. Native
 hardware GPU behavior remains unverified; software-rendered checks do not
 establish native GPU performance or compatibility.
+
+Weather keeps a compact active-product summary and legend visible outside the
+expanded controls. Each product retains its own observed or forecast clock.
+Inspection emphasizes the chosen scalar and marks the exact sampled location;
+the passive marker follows that snapshot, respects globe occlusion and disappears
+on dismissal, field/model/unit changes, disable or teardown. Clean view and
+recording mode hide weather presentation with the other controls. Scalar changes
+reuse native wind geometry when the model, issue/valid time, grid and U/V values
+are identical; new or revised wind still rebuilds. Source and renderer clocks
+remain independent of the shared Cesium clock.
+
+Weather also offers default-off lightning density and cyclone advisories.
+Lightning uses NOAA/NWS nowCOAST's public derived 15-minute density product from
+Vaisala NLDN/GLD360, with ten-minute metadata refresh and exact source times.
+Coverage is the Americas/Pacific (110°E across the dateline to 0°, 25°S–80°N),
+not worldwide detections; units are strikes/km²/min ×10³. It is neither raw GLM
+flashes nor a live strike counter. Weather imagery orders scalar context below
+satellite, radar and lightning consistently across enable and history order.
+
+Cyclones combine fixed NHC/CPHC status and summary GIS endpoints through a bounded
+same-origin provider. The status endpoint lacks browser CORS; each installation
+fetches keyless public sources at runtime, with no centralized ingestion service.
+The five-minute snapshot covers Atlantic and eastern/central North Pacific only.
+Current positions, advisory issue time and position time stay distinct. Tracks,
+forecast lead-hour points and cones render only when all source parts match the
+status advisory; a newer status shows its position with geometry pending rather
+than relabeling older geometry. The cone represents forecast center uncertainty,
+not storm size or the full hazard area. Successful empty and unavailable states
+are distinct. One owned native Cesium data source preserves polygon holes and
+geographic seams and releases on disable; forecast animation is not implied.
+Consult the linked official advisory for safety decisions.
 
 Voice and HUD snapshots reuse the existing feedState classifier. Analyst follow-ups retain their original data provenance; current-view results append provenance without replacing legacy fields. HUD context and deterministic telemetry include non-nominal feed state.
 

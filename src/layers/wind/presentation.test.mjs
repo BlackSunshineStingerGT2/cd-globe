@@ -189,3 +189,20 @@ test('layer-driven hide does not move focus to an old trigger', () => {
   assert.equal(document.activeElement, modelControl);
   view.destroy();
 });
+
+test('selected scalar is the primary reading and missing scalar restores wind emphasis', () => {
+  const f = fixture();
+  const view = createWindPresentation({ container: f.container });
+  const card = f.find('gev-wind-reading');
+  for (const [scalarLabel, scalarValue] of [['Temperature', '12 °C'], ['Sea-level pressure', '1012 hPa']]) {
+    view.show({ ...reading, scalarLabel, scalarValue });
+    assert.equal(card.attributes.get('data-scalar'), 'true');
+    assert.equal(f.find('gev-wind-reading__scalar-value').textContent, scalarValue);
+    assert.ok(card.children.indexOf(f.find('gev-wind-reading__scalar')) < card.children.indexOf(f.find('gev-wind-reading__wind')));
+  }
+  view.show({ ...reading, scalarValue: null });
+  assert.equal(card.attributes.get('data-scalar'), 'false');
+  assert.equal(f.find('gev-wind-reading__scalar').hidden, true);
+  assert.equal(f.find('gev-wind-reading__wind').textContent, reading.wind);
+  view.destroy();
+});

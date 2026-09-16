@@ -4,6 +4,18 @@ import { readWindBody as readBytesCapped } from '../../src/sources/windBody.js';
 const BASE = 'https://nowcoast.noaa.gov/geoserver/observations/';
 const HOUR = 3600_000;
 const PRODUCTS = Object.freeze({
+  lightning: Object.freeze({
+    service: 'lightning_detection',
+    layer: 'ldn_lightning_strike_density',
+    style: 'lightning_density',
+    title: 'Lightning density · 15 min',
+    coverage:
+      'Pacific and Americas: 110°E across the dateline to 0°, 25°S–80°N; not global coverage.',
+    description:
+      'Observed 15-minute lightning strike density on an approximately 8 km grid, scaled as strikes/km²/min ×10³. Ground-network density, not individual GLM flashes.',
+    attribution: 'NOAA/NWS nowCOAST; derived from Vaisala NLDN/GLD360',
+    metadataTtlMs: 600_000,
+  }),
   radar: Object.freeze({
     service: 'weather_radar',
     layer: 'conus_base_reflectivity_mosaic',
@@ -287,8 +299,9 @@ export function weatherProxy({
   async function getMetadata(product, signal) {
     signal.throwIfAborted();
     const old = metadata.get(product);
-    if (old && now() - old.fetchedAt < 120_000) return { ...old, stale: false };
     const spec = PRODUCTS[product];
+    if (old && now() - old.fetchedAt < (spec.metadataTtlMs ?? 120_000))
+      return { ...old, stale: false };
     try {
       if (
         now() - (attempts.get(product) ?? -Infinity) < 30_000 &&
@@ -337,7 +350,7 @@ export function weatherProxy({
       coverage: spec.coverage,
       description: spec.description,
       source: 'NOAA nowCOAST',
-      attribution: 'NOAA/NWS/NESDIS nowCOAST',
+      attribution: spec.attribution ?? 'NOAA/NWS/NESDIS nowCOAST',
       bounds: value?.bounds ?? null,
       times: value?.times ?? [],
       latest: time,

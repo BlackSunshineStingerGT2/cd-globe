@@ -1,6 +1,13 @@
 # Changelog
 
-## Unreleased — local weather review
+## Unreleased — weather review
+
+- Add keyless NOAA/NHC cyclone advisory positions, coherent forecast tracks and
+  uncertainty cones, plus NOAA's observed 15-minute lightning density imagery.
+  Preserve source clocks, basin coverage and explicit pending/stale states.
+- Make wind default to trails, preserve earlier share-link appearance, retain
+  geometry across scalar changes, and show a compact weather summary with a
+  location marker and selected-field emphasis for forecast inspection.
 
 - Add keyless NOAA observed rain radar and infrared satellite layers to Weather,
   with explicit coverage/freshness, recent observation playback and native Cesium tiles.

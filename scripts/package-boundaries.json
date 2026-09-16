@@ -380,6 +380,7 @@
     "modules": [
       "src/ui/layers.js",
       "src/ui/layerPanel.js",
+      "src/ui/weatherSummary.js",
       "src/ui/clearLayersControl.js",
       "src/loadingFeedback.js",
       "src/data/installationFeedback.js",
@@ -548,6 +549,7 @@
       "src/ui/effects.js",
       "src/ui/frameRateMonitor.js",
       "src/ui/layerPanel.js",
+      "src/ui/weatherSummary.js",
       "src/ui/layers.js",
       "src/ui/leftPanelRail.js",
       "src/ui/location.js",
@@ -1686,6 +1688,7 @@
       "src/ui/effects.js",
       "src/ui/frameRateMonitor.js",
       "src/ui/layerPanel.js",
+      "src/ui/weatherSummary.js",
       "src/ui/layers.js",
       "src/ui/leftPanelRail.js",
       "src/ui/location.js",
@@ -1842,7 +1845,11 @@
       "src/director/sharing/lifetime.js",
       "src/director/authoring.js",
       "src/scenes/sharing.js",
-      "src/ui/sceneSharing.js"
+      "src/ui/sceneSharing.js",
+      "src/layers/weather/imageryOrder.js",
+      "src/layers/cyclones/index.js",
+      "src/layers/cyclones/rendering.js",
+      "src/layers/cyclones/source.js"
     ],
     "external": [
       "hls.js",
@@ -2252,7 +2259,11 @@
       "src/sources/overpassRoads.js",
       "src/layers/weather/index.js",
       "src/layers/weather/rendering.js",
-      "src/layers/weather/source.js"
+      "src/layers/weather/source.js",
+      "src/layers/weather/imageryOrder.js",
+      "src/layers/cyclones/index.js",
+      "src/layers/cyclones/rendering.js",
+      "src/layers/cyclones/source.js"
     ],
     "external": [
       "hls.js",

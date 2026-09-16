@@ -77,6 +77,7 @@ export function inspectWindAtCenter(
     ? sampleScalar(snapshot, lon, lat, overlay)
     : null;
   return {
+    position: point,
     coordinates: `${Math.abs(lat).toFixed(2)}°${lat < 0 ? 'S' : 'N'} · ${Math.abs(lon).toFixed(2)}°${lon < 0 ? 'W' : 'E'}`,
     wind: `${formatWindSpeed(speed, units)}${from === 'Calm' ? ' · calm' : ` from ${from}`}`,
     scalarLabel:
@@ -94,5 +95,64 @@ export function inspectWindAtCenter(
     status,
     explanation:
       'Interpolated model forecast on an approximately 1° grid. Broad weather patterns, not a street-level measurement.',
+  };
+}
+
+/** One passive marker for the captured location; it never samples on camera movement. */
+export function createWindInspectionMarker({ container, viewer, cesium }) {
+  let removeRender = null;
+  let marker = null;
+  const clear = () => {
+    removeRender?.();
+    removeRender = null;
+    marker?.remove();
+    marker = null;
+    viewer?.scene?.requestRender?.();
+  };
+  return {
+    show(position) {
+      clear();
+      const scene = viewer?.scene;
+      if (
+        !position ||
+        !container?.ownerDocument?.createElement ||
+        !scene?.postRender?.addEventListener ||
+        !scene.cartesianToCanvasCoordinates
+      )
+        return;
+      marker = container.ownerDocument.createElement('div');
+      marker.className = 'gev-wind-inspection-marker';
+      marker.setAttribute('aria-hidden', 'true');
+      marker.style.cssText =
+        'position:absolute;width:18px;height:18px;border:2px solid #fff;border-radius:50%;box-shadow:0 0 0 2px #153440,0 0 0 5px rgba(102,225,242,.35);transform:translate(-50%,-50%);pointer-events:none;z-index:150;';
+      container.appendChild(marker);
+      const occluder = new cesium.EllipsoidalOccluder(
+        scene.globe?.ellipsoid || cesium.Ellipsoid.WGS84,
+        viewer.camera.positionWC,
+      );
+      const render = () => {
+        occluder.cameraPosition = viewer.camera.positionWC;
+        const point = scene.cartesianToCanvasCoordinates(position);
+        const visible =
+          point &&
+          point.x >= 0 &&
+          point.y >= 0 &&
+          point.x <= scene.canvas.clientWidth &&
+          point.y <= scene.canvas.clientHeight &&
+          (scene.mode !== cesium.SceneMode.SCENE3D ||
+            occluder.isPointVisible(position));
+        marker.hidden = !visible;
+        if (!visible) return;
+        const canvasRect = scene.canvas.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        marker.style.left = `${point.x + canvasRect.left - containerRect.left}px`;
+        marker.style.top = `${point.y + canvasRect.top - containerRect.top}px`;
+      };
+      removeRender = scene.postRender.addEventListener(render);
+      render();
+      scene.requestRender?.();
+    },
+    clear,
+    destroy: clear,
   };
 }

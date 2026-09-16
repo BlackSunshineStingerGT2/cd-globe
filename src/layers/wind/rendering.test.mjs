@@ -590,7 +590,7 @@ for (const paused of [false, true]) {
     );
     if (paused)
       assert.equal(h.pending.size, 0, 'paused completion needs no RAF polling');
-    h.rendering.setField(FIELD);
+    h.rendering.setField({ ...FIELD, u: Float32Array.from([11]) });
     h.preRender.emit();
     ready = true;
     h.preRender.emit();
@@ -603,6 +603,78 @@ for (const paused of [false, true]) {
     ready = false;
     h.preRender.emit();
     assert.equal(notifications, 2, 'stop releases readiness observation');
+    h.rendering.destroy();
+  });
+}
+
+test('scalar snapshots retain identical GPU wind geometry and animation phase', () => {
+  let builds = 0;
+  const times = [];
+  const gpu = {
+    supported: () => true,
+    setField() { builds++; return true; },
+    tick(time) { times.push(time); },
+    setOptions() {},
+    clear() {},
+    destroy() {},
+    getParticleCount: () => 1,
+    getDiagnostics: () => ({ ready: true, pathCount: 1 }),
+  };
+  const h = harness({ createGpuRendering: () => gpu });
+  const snapshot = (changes = {}) => ({
+    model: 'gfs', level: '10m', units: 'm/s',
+    cycle: { runIso: '2026-09-15T00:00:00Z', validIso: '2026-09-15T03:00:00Z', forecastHour: 3 },
+    grid: { ...FIELD },
+    u: Float32Array.from(FIELD.u), v: Float32Array.from(FIELD.v),
+    ...changes,
+  });
+  h.rendering.attach();
+  h.rendering.setField(snapshot());
+  h.rendering.start();
+  h.callbacks.shift()(16);
+  h.callbacks.shift()(1016);
+  const phase = times.at(-1);
+  h.rendering.setOptions({ overlay: 'temperature' });
+  h.rendering.setField(snapshot({ scalar: { kind: 'temperature', units: '°C', values: Float32Array.from([24]) } }));
+  assert.equal(builds, 1, 'freshly decoded equal arrays reuse the worker-built primitive');
+  assert.equal(h.imagery.length, 1, 'new scalar field is still installed');
+  h.callbacks.shift()(1032);
+  assert.ok(times.at(-1) >= phase, 'scalar acquisition does not reset travelling highlights');
+  h.rendering.setField(snapshot({ scalar: { kind: 'temperature', units: '°C', values: Float32Array.from([28]) } }));
+  assert.equal(builds, 1, 'revised scalar alone does not rebuild flow');
+  assert.equal(h.imagery.length, 1, 'scalar replacement releases the prior image');
+  h.rendering.clear();
+  h.rendering.setField(snapshot());
+  assert.equal(builds, 2, 'clear invalidates reuse');
+  h.rendering.destroy();
+});
+
+for (const [label, change] of Object.entries({
+  model: { model: 'ifs' },
+  cycle: { cycle: { runIso: '2026-09-15T06:00:00Z' } },
+  validTime: { cycle: { runIso: '2026-09-15T00:00:00Z', validIso: '2026-09-15T04:00:00Z' } },
+  grid: { grid: { ...FIELD, lo1: -180 } },
+  spacing: { grid: { ...FIELD, dx: 180 } },
+  revisedU: { u: Float32Array.from([11]) },
+  revisedV: { v: Float32Array.from([1]) },
+  level: { level: '100m' },
+})) {
+  test(`GPU geometry rebuilds on changed ${label}`, () => {
+    let builds = 0;
+    const gpu = {
+      supported: () => true,
+      setField() { builds++; return true; },
+      tick() {}, setOptions() {}, clear() {}, destroy() {},
+      getParticleCount: () => 1,
+      getDiagnostics: () => ({ ready: true }),
+    };
+    const h = harness({ createGpuRendering: () => gpu });
+    const original = { model: 'gfs', level: '10m', grid: FIELD, u: FIELD.u, v: FIELD.v,
+      cycle: { runIso: '2026-09-15T00:00:00Z', validIso: '2026-09-15T03:00:00Z' } };
+    h.rendering.attach();
+    h.rendering.setField(original);
+    h.rendering.setField({ ...original, ...change });
+    assert.equal(builds, 2);
     h.rendering.destroy();
   });
 }

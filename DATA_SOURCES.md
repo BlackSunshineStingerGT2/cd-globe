@@ -267,3 +267,48 @@ Community context: [#85](https://github.com/bilawalsidhu/gods-eye-view/issues/85
 [#588 radar](https://github.com/bilawalsidhu/gods-eye-view/pull/588), and
 [#457 clouds](https://github.com/bilawalsidhu/gods-eye-view/pull/457).
 This implementation is original; those contributions have not been merged here.
+
+
+### Weather: NHC/CPHC cyclone advisories
+
+- **Sources:** [NHC current tropical cyclone status](https://www.nhc.noaa.gov/CurrentStorms.json) and
+  [NOAA tropical weather summary GIS](https://mapservices.weather.noaa.gov/tropical/rest/services/tropical/NHC_tropical_weather_summary/MapServer).
+- **Rights/credit:** NOAA/NWS National Hurricane Center / Central Pacific Hurricane Center;
+  [NWS public-data terms](https://www.weather.gov/disclaimer). Fetch official products at runtime;
+  no bundled advisory archive and no NOAA endorsement implied.
+- **Coverage/meaning:** Atlantic and eastern/central North Pacific, not global cyclone coverage.
+  Status position time and advisory issue time remain separate. Forecast track, points and cone
+  require matching advisory numbers across all GIS parts. Cone means uncertainty in the
+  forecast center track, not storm size or a complete hazard boundary.
+- **Delivery:** keyless same-origin `/api/cyclones`, five-minute singleflight cache,
+  fixed upstream endpoints, bounded bodies/geometry/deadline, explicit unavailable/stale states.
+  Direct status fetching is unsuitable in browsers because NHC does not advertise CORS.
+
+### Weather: observed lightning density
+
+- **Source:** [NOAA nowCOAST lightning detection WMS](https://nowcoast.noaa.gov/geoserver/observations/lightning_detection/ows),
+  fixed `ldn_lightning_strike_density` layer and `lightning_density` style.
+- **Rights/credit:** NOAA/NWS nowCOAST; derived from Vaisala NLDN/GLD360.
+  [Official product description and public distribution terms](https://ocean.weather.gov/lightning/lightning_pdd.php)
+  permit distribution of this NOAA Level-5 derived product, not raw Vaisala detections.
+- **Meaning:** 15-minute accumulated density on an approximately 8 km grid;
+  source color scale is strikes per km² per minute ×10³. Not individual GLM optical flashes,
+  a live ground-strike counter, an all-clear indication, or global coverage.
+- **Coverage:** 110°E across the Pacific/Americas to 0°, 25°S–80°N. Display exact advertised
+  observations; ten-minute metadata refresh, source-matched colors, bounded shared imagery cache.
+
+### Community weather prior art
+
+The weather design builds on Gustavo Beneduzi's retained GFS/ECMWF contribution
+commits ([#459](https://github.com/bilawalsidhu/gods-eye-view/pull/459),
+[#464](https://github.com/bilawalsidhu/gods-eye-view/pull/464)). Related community
+proposals informed the observed-weather experience: Sandiv D's on-demand radar
+and imagery controls ([#588](https://github.com/bilawalsidhu/gods-eye-view/pull/588));
+Gustavo Beneduzi's GOES and GLM source work
+([#457](https://github.com/bilawalsidhu/gods-eye-view/pull/457),
+[#458](https://github.com/bilawalsidhu/gods-eye-view/pull/458)); and HadiMuhammed's
+NOAA hazard provenance and freshness work
+([#414](https://github.com/bilawalsidhu/gods-eye-view/pull/414)).
+The fixed nowCOAST imagery and NHC advisory implementations are original maintainer
+work; this acknowledgement does not represent merging those four PRs or equate
+NOAA density imagery with the raw GLM product.

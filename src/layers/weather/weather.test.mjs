@@ -62,7 +62,7 @@ function target(extra = {}) {
     },
   };
 }
-function renderingHarness() {
+function renderingHarness(options = {}) {
   const layers = [];
   const providers = [];
   const postRender = event();
@@ -104,6 +104,10 @@ function renderingHarness() {
       const i = layers.indexOf(layer);
       if (i > 0) [layers[i - 1], layers[i]] = [layers[i], layers[i - 1]];
     },
+    raiseToTop(layer) {
+      const i = layers.indexOf(layer);
+      if (i >= 0) layers.push(...layers.splice(i, 1));
+    },
     isDestroyed: () => false,
   };
   const viewer = {
@@ -127,7 +131,7 @@ function renderingHarness() {
     Credit: class {},
     Rectangle: { fromDegrees: (...values) => values },
   };
-  const rendering = createWeatherRendering({ viewer, cesium });
+  const rendering = createWeatherRendering({ viewer, cesium, ...options });
   const settle = () => {
     postRender.emit();
     postRender.emit();
@@ -142,6 +146,128 @@ function renderingHarness() {
     renders: () => renderRequests,
   };
 }
+
+test('a ready weather frame does not wait for unrelated terrain, but requires successful quiet tiles', async () => {
+  let now = 0;
+  const h = renderingHarness({ now: () => now });
+  h.viewer.scene.globe.tilesLoaded = false;
+  const loaded = h.rendering.setFrame(snapshot, times[0]);
+  h.settle();
+  assert.equal(
+    h.rendering.getDiagnostics().loading,
+    true,
+    'no successful tiles is not ready',
+  );
+  const tile = deferred();
+  h.providers[0].response = tile;
+  const request = h.providers[0].requestImage(0, 0, 0, {});
+  tile.resolve({});
+  await request;
+  now = 199;
+  h.settle();
+  assert.equal(
+    h.rendering.getDiagnostics().loading,
+    true,
+    'scheduler quiet interval is required',
+  );
+  h.providers[0].response = null;
+  assert.equal(h.providers[0].requestImage(1, 0, 0, {}), undefined);
+  now = 500;
+  h.settle();
+  assert.equal(
+    h.rendering.getDiagnostics().loading,
+    true,
+    'a scheduler-deferred own tile prevents premature commit',
+  );
+  const delayed = deferred();
+  h.providers[0].response = delayed;
+  const admitted = h.providers[0].requestImage(1, 0, 0, {});
+  delayed.resolve({});
+  await admitted;
+  now = 701;
+  h.settle();
+  assert.equal(await loaded, true);
+  assert.equal(h.rendering.getDiagnostics().loadedTiles, 2);
+  assert.equal(h.rendering.getDiagnostics().frameLoadMs, 701);
+  h.rendering.clear();
+});
+
+test('camera movement drops abandoned deferred tiles but still waits for admitted requests', async () => {
+  let now = 0;
+  const h = renderingHarness({ now: () => now });
+  const moveEnd = event();
+  h.viewer.camera = { moveEnd };
+  h.viewer.scene.globe.tilesLoaded = false;
+  const stage = h.rendering.setFrame(snapshot, times[0]);
+  assert.equal(moveEnd.size, 1);
+  const provider = h.providers[0];
+  const first = deferred();
+  provider.response = first;
+  const firstRequest = provider.requestImage(0, 0, 0, {});
+  first.resolve({});
+  await firstRequest;
+  provider.response = null;
+  assert.equal(provider.requestImage(1, 0, 0, {}), undefined);
+  const pending = deferred();
+  provider.response = pending;
+  const admitted = provider.requestImage(2, 0, 0, {});
+  assert.equal(h.rendering.getDiagnostics().deferredTiles, 1);
+  assert.equal(h.rendering.getDiagnostics().pendingTiles, 1);
+  now = 500;
+  moveEnd.emit();
+  assert.equal(
+    h.rendering.getDiagnostics().deferredTiles,
+    0,
+    'an unadmitted tile abandoned by the old viewport no longer blocks the stage',
+  );
+  assert.equal(
+    h.rendering.getDiagnostics().pendingTiles,
+    1,
+    'camera movement does not erase admitted request ownership',
+  );
+  now = 800;
+  h.settle();
+  assert.equal(h.rendering.getDiagnostics().loading, true);
+  assert.equal(
+    h.layers[0].alpha,
+    0,
+    'the new observation stays invisible while a request is pending',
+  );
+  pending.resolve({});
+  await admitted;
+  now = 999;
+  h.settle();
+  assert.equal(
+    h.rendering.getDiagnostics().loading,
+    true,
+    'completion starts a new quiet interval',
+  );
+  now = 1000;
+  h.postRender.emit();
+  assert.equal(
+    h.rendering.getDiagnostics().loading,
+    true,
+    'commit still requires two settled renders',
+  );
+  h.postRender.emit();
+  assert.equal(await stage, true);
+  assert.equal(h.rendering.getDiagnostics().loadedTiles, 2);
+  assert.equal(h.rendering.getDiagnostics().time, times[0]);
+  assert.equal(
+    moveEnd.size,
+    0,
+    'committing releases the stage camera listener',
+  );
+  const abandoned = h.rendering.setFrame(snapshot, times[1]);
+  assert.equal(moveEnd.size, 1);
+  h.rendering.clear();
+  assert.equal(await abandoned, false);
+  assert.equal(
+    moveEnd.size,
+    0,
+    'teardown also releases the stage camera listener',
+  );
+});
 
 test('weather stages invisibly, waits for pending tiles and render readiness, and replaces atomically', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
@@ -248,7 +374,7 @@ test('failed and timed-out stages retain the previous observation; a healthy rep
   h.rendering.clear();
 });
 
-function layerHarness({ reducedMotion = false, feed } = {}) {
+function layerHarness({ reducedMotion = false, feed, id } = {}) {
   const stages = [];
   const motion = target({ matches: reducedMotion });
   const documentRef = target({ hidden: false });
@@ -290,6 +416,7 @@ function layerHarness({ reducedMotion = false, feed } = {}) {
   };
   const viewer = { camera: { moveEnd } };
   const layer = createWeatherLayer({
+    id,
     feed: feed ?? { getSnapshot: async () => snapshot },
     documentRef,
     matchMedia: () => motion,
@@ -536,5 +663,58 @@ test('coverage navigation requires the shared shell handoff and detaches cleanly
   h.layer.attachShellServices(null);
   h.layer.setParams({ focus: true });
   assert.equal(handoffs, 1);
+  h.layer.destroy();
+});
+
+test('manifest refresh during a manual history stage does not strand loading controls', async () => {
+  const h = layerHarness();
+  const first = h.layer.update();
+  await flush();
+  h.stages[0].finish();
+  await first;
+  h.layer.setParams({ step: -1 });
+  assert.equal(h.layer.getStats().loading, true);
+  await h.layer.update();
+  assert.equal(
+    h.stages.length,
+    2,
+    'metadata refresh preserves the staged manual selection',
+  );
+  h.stages[1].finish();
+  await flush();
+  assert.equal(h.layer.getStats().loading, false);
+  assert.equal(h.layer.getStats().observedAt, times[1]);
+  assert.equal(
+    h.layer.getRowControls().chips.find((chip) => chip.id === 'previous')
+      .disabled,
+    false,
+  );
+  h.layer.destroy();
+});
+
+test('historical observations do not relabel a fresh lightning feed as stale', async () => {
+  const now = Date.now();
+  const old = new Date(now - 90 * 60_000).toISOString();
+  const recent = new Date(now - 5 * 60_000).toISOString();
+  const h = layerHarness({
+    id: 'weather-lightning',
+    feed: {
+      getSnapshot: async () => ({
+        ...snapshot,
+        product: 'lightning',
+        times: [old, recent],
+        latest: recent,
+      }),
+    },
+  });
+  const first = h.layer.update();
+  await flush();
+  h.stages[0].finish();
+  await first;
+  h.layer.setParams({ step: -1 });
+  h.stages[1].finish();
+  await flush();
+  assert.equal(h.layer.getStats().stale, false);
+  assert.match(h.layer.getRowControls().summary.detail, /History/);
   h.layer.destroy();
 });

@@ -758,5 +758,17 @@
   "src/director/interactions/interactions.test.mjs",
   "scripts/qa-director-interactions.mjs",
   "src/director/sharing/sharing.test.mjs",
-  "scripts/qa-director-sharing.mjs"
+  "scripts/qa-director-sharing.mjs",
+  "src/ui/weatherSummary.js",
+  "src/ui/weatherSummary.test.mjs",
+  "src/layers/weather/imageryOrder.js",
+  "src/layers/weather/imageryOrder.test.mjs",
+  "server/providers/cyclones.js",
+  "src/data/cyclonesProxy.test.mjs",
+  "src/layers/cyclones/index.js",
+  "src/layers/cyclones/rendering.js",
+  "src/layers/cyclones/source.js",
+  "src/layers/cyclones/rendering.test.mjs",
+  "src/layers/cyclones/index.test.mjs",
+  "src/layers/cyclones/source.test.mjs"
 ]

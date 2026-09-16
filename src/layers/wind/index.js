@@ -2,7 +2,11 @@ import * as Cesium from 'cesium';
 import { createWindRendering } from './rendering.js';
 import { WIND_FIELDS } from './fields.js';
 import { createWindPresentation } from './presentation.js';
-import { inspectWindAtCenter, WIND_UNITS } from './inspection.js';
+import {
+  inspectWindAtCenter,
+  createWindInspectionMarker,
+  WIND_UNITS,
+} from './inspection.js';
 
 /** Format a forecast timestamp explicitly in UTC. */
 export function formatWindValidTime(value) {
@@ -41,10 +45,15 @@ export function createWindLayer({
   let error = null;
   let loading = false;
   let model = 'gfs';
-  let overlay = 'speed';
+  let overlay = 'none';
   let paused = false;
   let units = 'km/h';
   let presentation = null;
+  let inspectionMarker = null;
+  const hideInspection = () => {
+    presentation?.hide();
+    inspectionMarker?.clear();
+  };
   const requestedScalar = () =>
     ['temperature', 'pressure'].includes(overlay) ? overlay : 'none';
   let generation = 0;
@@ -68,7 +77,15 @@ export function createWindLayer({
       rendering.setOptions?.({ overlay, paused });
       const target = container ?? nextViewer.container;
       if (target?.appendChild && target.ownerDocument?.createElement)
-        presentation = createPresentation({ container: target });
+        presentation = createPresentation({
+          container: target,
+          onClose: () => inspectionMarker?.clear(),
+        });
+      inspectionMarker = createWindInspectionMarker({
+        container: target,
+        viewer,
+        cesium,
+      });
     },
     enable() {
       enabled = true;
@@ -84,7 +101,7 @@ export function createWindLayer({
       // would falsely satisfy an appearance-only reuse after the next enable.
       manifest = null;
       error = null;
-      presentation?.hide();
+      hideInspection();
       rendering?.stop();
       rendering?.clear();
     },
@@ -92,12 +109,13 @@ export function createWindLayer({
       if (!enabled) return false;
       request?.abort();
       const controller = new AbortController();
+      if (signal?.aborted) controller.abort(signal.reason);
       const abort = () => controller.abort(signal.reason);
       signal?.addEventListener('abort', abort, { once: true });
       request = controller;
       generation += 1;
       loading = true;
-      presentation?.hide();
+      hideInspection();
       notify();
       try {
         signal?.throwIfAborted();
@@ -146,7 +164,7 @@ export function createWindLayer({
       if (modelChanged) model = params.model;
       if (overlayChanged) overlay = params.overlay;
       rendering?.setOptions?.({ overlay, paused });
-      if (modelChanged || overlayChanged || unitsChanged) presentation?.hide();
+      if (modelChanged || overlayChanged || unitsChanged) hideInspection();
       if (modelChanged) {
         manifest = null;
         error = null;
@@ -178,22 +196,20 @@ export function createWindLayer({
           rendering?.start();
       }
       if (params.inspect === true && enabled) {
-        presentation?.show(
-          inspectWindAtCenter(manifest, viewer, cesium, {
-            units,
-            overlay,
-            model: model === 'ifs' ? 'ECMWF IFS' : 'NOAA GFS',
-            validTime:
-              formatWindValidTime(manifest?.cycle?.validIso) || 'Unavailable',
-            status: loading
-              ? 'Loading forecast'
-              : error ||
-                manifest?.reason ||
-                (manifest?.stale
-                  ? 'Cached forecast · stale'
-                  : 'Model forecast'),
-          }),
-        );
+        const reading = inspectWindAtCenter(manifest, viewer, cesium, {
+          units,
+          overlay,
+          model: model === 'ifs' ? 'ECMWF IFS' : 'NOAA GFS',
+          validTime:
+            formatWindValidTime(manifest?.cycle?.validIso) || 'Unavailable',
+          status: loading
+            ? 'Loading forecast'
+            : error ||
+              manifest?.reason ||
+              (manifest?.stale ? 'Cached forecast · stale' : 'Model forecast'),
+        });
+        inspectionMarker?.show(reading.position);
+        presentation?.show(reading);
       }
       notify();
     },
@@ -240,6 +256,20 @@ export function createWindLayer({
         };
       });
       return {
+        summary: {
+          label,
+          detail: `${model === 'ifs' ? 'ECMWF IFS' : 'GFS'} forecast · ${valid || 'Unavailable'}`,
+          status: loading
+            ? 'Loading forecast'
+            : preparing
+              ? 'Preparing flow'
+              : error ||
+                manifest?.reason ||
+                imageryError ||
+                (scalarMissing ? 'Selected field unavailable' : null) ||
+                (manifest?.stale ? 'Cached forecast · stale' : null),
+          units: legendUnit,
+        },
         chips: [
           ...['gfs', 'ifs'].map((value) => ({
             id: `model-${value}`,
@@ -267,10 +297,10 @@ export function createWindLayer({
           ...['none', 'speed', 'pressure', 'temperature'].map((value) => ({
             id: `overlay-${value}`,
             label: {
-              none: 'Trails',
+              none: 'No color field',
               speed: 'Speed',
               pressure: 'Pressure',
-              temperature: 'Temp',
+              temperature: 'Temperature',
             }[value],
             active: overlay === value,
             params: { overlay: value },
@@ -318,6 +348,8 @@ export function createWindLayer({
       rendering = null;
       viewer = null;
       rowControlsListener = null;
+      inspectionMarker?.destroy();
+      inspectionMarker = null;
       presentation?.destroy();
       presentation = null;
     },
@@ -334,6 +366,7 @@ export function createWindLayer({
           : null;
       return {
         ...windStats(manifest),
+        countLabel: 'Forecast',
         loading: loading || Boolean(preparing),
         model: model.toUpperCase(),
         overlay,

@@ -4,6 +4,7 @@ export const WEATHER_PRODUCTS = Object.freeze([
   'radar',
   'clouds',
   'clouds-regional',
+  'lightning',
 ]);
 
 /** Only bounded, explicit observations may become imagery requests. */
