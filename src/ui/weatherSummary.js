@@ -39,12 +39,16 @@ export function createWeatherSummary({ container, onOpen = () => {} } = {}) {
           status.className = 'weather-summary-status';
           const ramp = document.createElement('span');
           ramp.className = 'weather-summary-ramp';
+          const zero = document.createElement('span');
+          zero.className = 'weather-summary-zero';
+          zero.setAttribute('aria-hidden', 'true');
+          ramp.appendChild(zero);
           const scale = document.createElement('span');
           scale.className = 'weather-summary-scale';
           for (const node of [label, detail, status, ramp, scale])
             element.appendChild(node);
           root.appendChild(element);
-          row = { element, label, detail, status, ramp, scale };
+          row = { element, label, detail, status, ramp, scale, zero };
           rows.set(id, row);
         }
         text(row.label, summary.label);
@@ -56,6 +60,14 @@ export function createWeatherSummary({ container, onOpen = () => {} } = {}) {
           .map(({ color }) => color)
           .filter((color) => /^#[0-9a-f]{6}$/i.test(color));
         row.ramp.hidden = row.scale.hidden = colors.length < 2;
+        const zeroIndex = legend.findIndex(({ label }) => label === '0');
+        row.zero.hidden =
+          summary.units !== '°C' ||
+          zeroIndex < 0 ||
+          colors.length < 2 ||
+          colors.length !== legend.length;
+        if (!row.zero.hidden)
+          row.zero.style.left = `${(zeroIndex / (legend.length - 1)) * 100}%`;
         const gradient =
           colors.length > 1
             ? `linear-gradient(to right, ${colors.join(',')})`

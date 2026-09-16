@@ -89,3 +89,23 @@ test('weather summary excludes arbitrary CSS from legend and supports missing DO
   assert.equal(ramp.hidden, true);
   view.destroy();
 });
+
+test('temperature freezing anchor follows its physical legend position, not its midpoint', () => {
+  const container = fixture();
+  const view = createWeatherSummary({ container });
+  const legend = Array.from({ length: 10 }, (_, index) => ({
+    label: String(-40 + index * 10),
+    color: '#abcdef',
+  }));
+  view.update([
+    { id: 'wind', summary: { label: 'Temperature', units: '°C' }, legend },
+  ]);
+  const zero = container.children[0].children[1].children[3].children[0];
+  assert.equal(zero.hidden, false);
+  assert.ok(Math.abs(parseFloat(zero.style.left) - 44.444444) < 0.001);
+  view.update([
+    { id: 'wind', summary: { label: 'Speed', units: 'km/h' }, legend },
+  ]);
+  assert.equal(zero.hidden, true);
+  view.destroy();
+});

@@ -358,3 +358,28 @@ body.recording-mode .gev-wind-reading {
   visibility: hidden !important;
   pointer-events: none !important;
 }
+
+/* Inspection temporarily gives the map room; closing it restores the same controls. */
+@media (max-width: 720px) {
+  body:has(.gev-wind-reading:not([hidden])) #left-panel-stack {
+    display: none;
+  }
+}
+.weather-summary-ramp {
+  position: relative;
+}
+.weather-summary-zero {
+  position: absolute;
+  top: -2px;
+  height: 8px;
+  border-left: 1px solid #fff;
+}
+.weather-summary-zero::after {
+  content: '0°C';
+  position: absolute;
+  top: 8px;
+  left: 0;
+  transform: translateX(-50%);
+  font-size: 9px;
+  color: #e8f4f7;
+}

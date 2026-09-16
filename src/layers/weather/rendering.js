@@ -67,13 +67,15 @@ export function createWeatherRendering({
         tileHeight: global ? 1024 : 256,
         maximumLevel: global ? 0 : 6,
         enablePickFeatures: false,
+        // Verbose source courtesy text belongs in Cesium's attribution popup.
+        // Product identity remains visible in the row and Weather summary.
         credit: new cesium.Credit(
           snapshot.product === 'lightning'
             ? 'NOAA/NWS lightning density · derived from Vaisala NLDN/GLD360'
             : snapshot.product === 'radar'
               ? 'NOAA nowCOAST · NWS/OAR MRMS'
               : 'NOAA nowCOAST · NESDIS GOES / global satellite partners',
-          true,
+          false,
         ),
       });
       const frame = {
