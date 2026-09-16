@@ -37,7 +37,8 @@ Source acquisition retains deadlines, body budgets, disconnect cancellation,
 per-model/field singleflight caching and one-minute failure backoff. Application
 catalog construction owns each instance.
 
-This Wind prototype adds no cloud volume, radar or forecast-time playback.
+Wind animates one forecast without advancing forecast time. Separate Weather
+observation layers provide radar and satellite history; none claims measured cloud volume.
 Mapped.earth's public bundles informed the rendering study; no code or assets
 were reused, and the study found no application licence granting reuse. Native
 hardware GPU behavior remains unverified; software-rendered checks do not
