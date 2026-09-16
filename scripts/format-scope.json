@@ -743,5 +743,16 @@
   "src/layers/weather/weather.test.mjs",
   "src/layers/weather/source.test.mjs",
   "src/data/weatherProxy.test.mjs",
-  "server/providers/weather.js"
+  "server/providers/weather.js",
+  "src/director/clock.test.mjs",
+  "src/director/timeline.test.mjs",
+  "src/scenes/packs/registry.test.mjs",
+  "scripts/qa-director-timing.mjs",
+  "src/director/document.test.mjs",
+  "src/director/camera.test.mjs",
+  "src/scenes/cameraMotion.test.mjs",
+  "scripts/qa-director-camera.mjs",
+  "src/director/packs/packs.test.mjs",
+  "scripts/qa-director-packs.mjs",
+  "src/scenes/dataPacks/presentation.test.mjs"
 ]
