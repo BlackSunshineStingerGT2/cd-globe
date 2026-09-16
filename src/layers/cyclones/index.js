@@ -1,4 +1,6 @@
 import * as Cesium from 'cesium';
+import { hitTestWorldOverlay } from '../../overlays/worldOverlay.js';
+import { VESSEL_OVERLAY_SOURCE_ID } from '../../data/vesselLabels.js';
 import { isPointerFree } from '../../data/inputOwnership.js';
 import {
   registerPickOwner,
@@ -29,6 +31,7 @@ const number = (value, unit) =>
 /** Advisory status and coherent forecast geometry; selected through the shared row list. */
 export function createCyclonesLayer({
   feed,
+  hitTestOverlay = hitTestWorldOverlay,
   cesium = Cesium,
   createRendering = createCycloneRendering,
   matchMedia = globalThis.matchMedia?.bind(globalThis),
@@ -42,7 +45,8 @@ export function createCyclonesLayer({
     request = null,
     listener = null,
     selectedId = null,
-    clickHandler = null;
+    clickHandler = null,
+    removeClickCapture = null;
   let enabled = false,
     loading = false,
     error = null,
@@ -60,7 +64,44 @@ export function createCyclonesLayer({
       return;
     const owner = new cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
     clickHandler = owner;
+    // Snapshot before sibling bubble listeners can rebuild the overlay hit
+    // rectangles. A vessel selection does that synchronously in the same click.
+    const canvas = viewer.scene.canvas;
+    let capturedHit = null;
+    const capture = (event) => {
+      capturedHit = null;
+      const point = event.changedTouches?.[0] || event;
+      if (!Number.isFinite(point.clientX) || !Number.isFinite(point.clientY))
+        return;
+      const rect = canvas.getBoundingClientRect();
+      const x = point.clientX - rect.left,
+        y = point.clientY - rect.top;
+      capturedHit = { x, y, sourceId: hitTestOverlay(x, y)?.sourceId };
+    };
+    const resetCapture = () => {
+      capturedHit = null;
+    };
+    const resetEvents = [
+      'pointerdown',
+      'mousedown',
+      'touchstart',
+      'pointercancel',
+      'touchcancel',
+    ];
+    for (const type of resetEvents)
+      canvas.addEventListener?.(type, resetCapture, true);
+    const events = ['pointerup', 'mouseup', 'touchend'];
+    for (const type of events) canvas.addEventListener?.(type, capture, true);
+    removeClickCapture = () => {
+      for (const type of events)
+        canvas.removeEventListener?.(type, capture, true);
+      for (const type of resetEvents)
+        canvas.removeEventListener?.(type, resetCapture, true);
+      capturedHit = null;
+    };
     owner.setInputAction((click) => {
+      const nativeHit = capturedHit;
+      capturedHit = null;
       // Ambient selection yields to draw tools and Director; it never claims
       // the pointer, camera, or tracking state.
       if (
@@ -71,6 +112,17 @@ export function createCyclonesLayer({
         !click?.position
       )
         return;
+      // AIS cards paint above the globe on a pointer-events:none canvas. The
+      // vessel handler resolves this same topmost hit before cyclone geometry.
+      const captureMatches =
+        nativeHit &&
+        Math.abs(nativeHit.x - click.position.x) < 1 &&
+        Math.abs(nativeHit.y - click.position.y) < 1;
+      const sourceId = captureMatches
+        ? nativeHit.sourceId
+        : hitTestOverlay(click.position.x, click.position.y)?.sourceId;
+      capturedHit = null;
+      if (sourceId === VESSEL_OVERLAY_SOURCE_ID) return;
       const id = rendering?.pickStorm(viewer.scene.pick(click.position));
       if (id && id !== selectedId) layer.setParams({ stormId: id });
     }, cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -78,6 +130,8 @@ export function createCyclonesLayer({
   function removeSelection() {
     const owner = clickHandler;
     clickHandler = null;
+    removeClickCapture?.();
+    removeClickCapture = null;
     if (owner && !owner.isDestroyed?.()) owner.destroy();
   }
   const layer = {

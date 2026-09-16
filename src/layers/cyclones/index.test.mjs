@@ -49,6 +49,8 @@ test('map selection yields to pointer owners and owns only its enabled handler',
     pickedEntity = {},
     foreignEntity = {};
   let picked = { id: pickedEntity },
+    overlayHit = null,
+    overlayTests = 0,
     picks = 0,
     notices = 0;
   const rendering = {
@@ -84,10 +86,16 @@ test('map selection yields to pointer owners and owns only its enabled handler',
     feed: { getSnapshot: async () => snapshot([storm(), storm('ep162026')]) },
     cesium,
     createRendering: () => rendering,
+    hitTestOverlay: () => {
+      overlayTests++;
+      return overlayHit;
+    },
   });
+  const canvas = new EventTarget();
+  canvas.getBoundingClientRect = () => ({ left: 100, top: 200 });
   const viewer = {
     scene: {
-      canvas: {},
+      canvas,
       pick() {
         picks++;
         return picked;
@@ -132,6 +140,50 @@ test('map selection yields to pointer owners and owns only its enabled handler',
   handlers[0].click(click);
   assert.equal(layer.getDiagnostics().selectedId, 'ep152026');
   picked = { id: pickedEntity };
+  overlayHit = { sourceId: 'ais-live-vessels', entryId: 'vessel:123' };
+  const beforeCard = picks;
+  handlers[0].click(click);
+  assert.equal(
+    picks,
+    beforeCard,
+    'foreground AIS card wins before scene picking',
+  );
+  assert.equal(layer.getDiagnostics().selectedId, 'ep152026');
+  // A native capture runs before an earlier sibling handler clears hit rects.
+  const up = new Event('pointerup');
+  Object.assign(up, { clientX: 110, clientY: 220 });
+  canvas.dispatchEvent(up);
+  overlayHit = null;
+  handlers[0].click(click);
+  assert.equal(
+    layer.getDiagnostics().selectedId,
+    'ep152026',
+    'captured AIS hit survives synchronous sibling overlay rebuild',
+  );
+  // A captured background hit remains background even if a sibling adds a card.
+  canvas.dispatchEvent(up);
+  overlayHit = { sourceId: 'ais-live-vessels', entryId: 'vessel:123' };
+  handlers[0].click(click);
+  assert.equal(layer.getDiagnostics().selectedId, 'ep162026');
+  layer.setParams({ stormId: 'ep152026' });
+  // A new gesture clears an unconsumed release snapshot.
+  canvas.dispatchEvent(up);
+  canvas.dispatchEvent(new Event('pointerdown'));
+  overlayHit = null;
+  handlers[0].click(click);
+  assert.equal(layer.getDiagnostics().selectedId, 'ep162026');
+  layer.setParams({ stormId: 'ep152026' });
+  overlayHit = { sourceId: 'ais-live-vessels', entryId: 'vessel:123' };
+  canvas.dispatchEvent(up);
+  overlayHit = null;
+  handlers[0].click({ position: { x: 15, y: 25 } });
+  assert.equal(
+    layer.getDiagnostics().selectedId,
+    'ep162026',
+    'a different click cannot reuse the captured card',
+  );
+  layer.setParams({ stormId: 'ep152026' });
+  overlayHit = { sourceId: 'cctv', entryId: 'camera:1' };
   const before = notices;
   handlers[0].click(click);
   assert.equal(layer.getDiagnostics().selectedId, 'ep162026');
@@ -152,6 +204,13 @@ test('map selection yields to pointer owners and owns only its enabled handler',
   assert.equal(handlers[0].destroyed, true);
   assert.equal(layer.getDiagnostics().selectionActive, false);
   const afterDisable = picks;
+  const afterDisableOverlay = overlayTests;
+  canvas.dispatchEvent(up);
+  assert.equal(
+    overlayTests,
+    afterDisableOverlay,
+    'disable removes native capture listeners',
+  );
   handlers[0].click(click);
   assert.equal(picks, afterDisable, 'queued disabled callback is inert');
   layer.enable();
