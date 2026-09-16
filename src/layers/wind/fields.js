@@ -13,8 +13,21 @@ export const WIND_FIELDS = Object.freeze({
     label: '2 m air temperature',
     units: '°C',
     min: -40,
-    max: 45,
-    stops: ['#34548f', '#4f88b9', '#65b9be', '#deb86d', '#df8358', '#bc4650'],
+    max: 50,
+    // Fixed 10°C anchors keep model comparisons honest while making everyday
+    // temperature gradients distinguishable from the underlying basemap.
+    stops: [
+      '#31235b',
+      '#403b92',
+      '#315fc1',
+      '#268fce',
+      '#31bdd0',
+      '#8ad4aa',
+      '#f0d255',
+      '#ee8a34',
+      '#d74638',
+      '#9f274d',
+    ],
   }),
   pressure: Object.freeze({
     label: 'Mean sea-level pressure',
@@ -149,7 +162,7 @@ export function createFieldRaster(snapshot, kind, width = 360, height = 181) {
           ? 0.22 + 0.43 * Math.sqrt(t)
           : kind === 'pressure'
             ? 0.24 + 0.3 * Math.min(1, Math.abs(value - 1013) / 40)
-            : 0.62;
+            : 0.9;
       rgba[offset + 3] = Math.round(255 * alpha);
       finiteCount++;
     }

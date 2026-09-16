@@ -3956,3 +3956,20 @@ closed. Performance and live agency reliability require recorded validation.
 ## Wind forecast models
 
 Wind supports selectable GFS/IFS models with persisted model choice. Each fetch chooses the available cycle and forecast step nearest the current time; rows show both issue and valid UTC timestamps. Grid identities include model, cycle, forecast step and any requested scalar field. The six model/field cache slots each retain the last two issued grids for manifest/grid rollover, coalesce concurrent requests, retain last-good data on failures and retry no faster than once per minute. Model changes clear the old field immediately, cancel old acquisition and ignore superseded results.
+
+### Local Weather review candidate
+
+Weather now combines the existing GFS/ECMWF surface forecast with two independently
+owned observation layers: NOAA Rain radar (CONUS) and Satellite clouds (regional
+GOES or slower global infrared). Existing layer-row controls provide source,
+opacity, coverage navigation, exact frame time, earlier/later history, playback and
+Latest. Playback never mutates the viewer clock; it pauses when hidden or reduced
+motion is requested. At most current+staging imagery exist per layer, retaining the
+previous frame if the incoming frame fails. Both layers are off by default and
+share/persist product and opacity; transient history does not persist.
+
+Desktop wind now allows 7,200 baked native GPU paths (narrow viewports remain at
+1,200). This doubles the maximum desktop geometry budget, not forecast resolution.
+Temperature uses stronger fixed −40..50°C colors; the underlying 1° forecast and
+numeric inspection values are unchanged. No volumetric cloud height or local rain
+arrival prediction is claimed. NOAA source limits are documented in DATA_SOURCES.

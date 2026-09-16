@@ -231,3 +231,39 @@ Douglas-Peucker simplification, 6-decimal rounding).
 ## In-app attribution
 
 The required Google Maps / Cesium credit renders on the on-globe credit line (`#cesium-credits`, bottom-left) and must stay visible — including in clean-view and recording modes (the whole line, logo + "Google Maps" + the "Data attribution" link, stays on screen; only the GEV panels/HUD fade). The layer-specific credits (adsb.lol, TeleGeography, OSM datacenters/dams/roads, NASA FIRMS, CelesTrak, USGS, City of Austin, Fintraffic, GBFS, Radio Browser, OpenSky, AISStream) are registered into the expandable **"Data attribution"** popover on that credit line via `viewer.creditDisplay.addStaticCredit(new Cesium.Credit(html, /* showOnScreen */ false))` — see `src/data/dataCredits.js`. When you add a new data source, add its license and attribution to this file **and** append an entry to `DATA_CREDITS` in `src/data/dataCredits.js` so it surfaces in the app.
+
+### Observed weather: NOAA nowCOAST
+
+The Weather section provides keyless, observed **MRMS radar reflectivity** for the
+contiguous United States and **infrared satellite imagery**. Fixed upstream WMS
+services: `https://nowcoast.noaa.gov/geoserver/observations/weather_radar/ows` and
+`https://nowcoast.noaa.gov/geoserver/observations/satellite/ows`.
+
+- `conus_base_reflectivity_mosaic`: approximately 1 km, usually 4-minute updates.
+  dBZ measures radar reflectivity, not rainfall rate, probability or future rain.
+  Coverage gaps do not mean no precipitation. The numeric legend follows NOAA's
+  `weather_radar_base_reflectivity` style.
+- `goes_longwave_imagery`: GOES-19/18 Band 14, approximately 2 km, 5-minute updates,
+  regional North America. Infrared includes clouds and land/sea temperatures;
+  it is not a cloud-only mask or measured cloud volume.
+- `global_longwave_imagery_mosaic`: approximately 3 km, hourly, nominal 60°S–60°N
+  coverage and typically 2–3-hour latency. It is slower global context.
+
+The UI displays the exact advertised observation time separately from acquisition;
+latest means the newest available observation, not zero-delay real time. Up to 13
+recent advertised frames can be replayed as history. No nowcast is synthesized.
+Tiles use WMS 1.1.1 EPSG:4326 longitude/latitude bounds; Cesium's geographic 2×1
+root grid is capped at level 6 for radar and regional GOES. Global infrared instead
+uses one fixed 2048×1024 geographic image: the source's request-dependent contrast
+otherwise creates brightness seams between tiles. This broad context view has a
+coarser display resolution than its 3 km source. No browser reprojection is used. Browser imagery owns at most two frames; the proxy has an 8-request
+concurrency budget, 12-second deadline, 1 MiB tile / 4 MiB global PNG caps and a shared 16 MiB/128-image cache.
+Metadata refreshes every two minutes with explicitly stale last-good fallback.
+No key, new dependency, image reprojection job, or full-disk image download is needed.
+
+Credit: NOAA nowCOAST, NWS/OAR MRMS, NESDIS GOES and global satellite partners.
+[NOAA disclaimer](https://oceanservice.noaa.gov/disclaimer.html).
+Community context: [#85](https://github.com/bilawalsidhu/gods-eye-view/issues/85),
+[#588 radar](https://github.com/bilawalsidhu/gods-eye-view/pull/588), and
+[#457 clouds](https://github.com/bilawalsidhu/gods-eye-view/pull/457).
+This implementation is original; those contributions have not been merged here.

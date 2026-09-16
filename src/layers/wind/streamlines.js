@@ -1,6 +1,8 @@
 import { metersPerDegreeLon, normalizeLongitude, sampleWind } from './model.js';
 
-export const WIND_PATH_LIMIT = 3600;
+// Desktop density is bounded independently of viewport zoom; camera motion
+// never triggers a regional rebake. Narrow-screen cost stays at 1200 paths.
+export const WIND_PATH_LIMIT = 7200;
 export const WIND_NARROW_PATH_LIMIT = 1200;
 export const WIND_PATH_STEPS = 16;
 export const WIND_DISPLAY_HEIGHT_METERS = 12000;

@@ -127,8 +127,10 @@ test('GPU owner builds one native batch; ticks update uniforms without rebuildin
   assert.equal(batch.appearance.material.uniforms.phaseTime, 9);
   assert.equal(h.builds(), builds);
   const diagnostics = h.owner.getDiagnostics();
-  assert.ok(diagnostics.pathCount <= 3600);
+  assert.ok(diagnostics.pathCount <= 7200);
+  assert.ok(diagnostics.pathCount > 7000, 'desktop retains the requested doubled global density');
   assert.ok(diagnostics.vertexCount > 0);
+  assert.ok(diagnostics.vertexCount <= 7200 * 128, 'expanded geometry remains bounded');
   assert.equal(diagnostics.ready, true);
   assert.equal(diagnostics.displayHeightMeters, 12000);
   const instances = batch.geometryInstances;

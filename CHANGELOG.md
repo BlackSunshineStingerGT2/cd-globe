@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — local weather review
+
+- Add keyless NOAA observed rain radar and infrared satellite layers to Weather,
+  with explicit coverage/freshness, recent observation playback and native Cesium tiles.
+- Increase desktop wind density to 7,200 paths and improve temperature contrast
+  while retaining the 1,200-path narrow-screen budget and unchanged forecast values.
+
+
 - Expand Wind into a surface-weather prototype: globe-draped speed shading,
   optional same-run 2 m temperature and mean sea-level pressure, GFS/ECMWF model
   selection, a numeric legend, wind units, Pause, and a dismissible map-center

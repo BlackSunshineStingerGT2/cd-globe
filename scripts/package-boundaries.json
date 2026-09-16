@@ -1764,7 +1764,10 @@
       "src/voice/realtimeFacade.js",
       "src/voice/realtimeRadio.js",
       "src/voice/realtimeTurns.js",
-      "src/voice/realtimeConnection.js"
+      "src/voice/realtimeConnection.js",
+      "src/layers/weather/index.js",
+      "src/layers/weather/rendering.js",
+      "src/layers/weather/source.js"
     ],
     "external": [
       "hls.js",
@@ -2171,7 +2174,10 @@
       "src/sources/overpassFeaturesRecords.js",
       "src/sources/overpassFeatures.js",
       "src/sources/featureSource.js",
-      "src/sources/overpassRoads.js"
+      "src/sources/overpassRoads.js",
+      "src/layers/weather/index.js",
+      "src/layers/weather/rendering.js",
+      "src/layers/weather/source.js"
     ],
     "external": [
       "hls.js",
