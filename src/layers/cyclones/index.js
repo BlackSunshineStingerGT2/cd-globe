@@ -89,14 +89,15 @@ export function createCyclonesLayer({
       'touchcancel',
     ];
     for (const type of resetEvents)
-      canvas.addEventListener?.(type, resetCapture, true);
+      canvas.addEventListener?.(type, resetCapture, { capture: true });
     const events = ['pointerup', 'mouseup', 'touchend'];
-    for (const type of events) canvas.addEventListener?.(type, capture, true);
+    for (const type of events)
+      canvas.addEventListener?.(type, capture, { capture: true });
     removeClickCapture = () => {
       for (const type of events)
-        canvas.removeEventListener?.(type, capture, true);
+        canvas.removeEventListener?.(type, capture, { capture: true });
       for (const type of resetEvents)
-        canvas.removeEventListener?.(type, resetCapture, true);
+        canvas.removeEventListener?.(type, resetCapture, { capture: true });
       capturedHit = null;
     };
     owner.setInputAction((click) => {
@@ -121,7 +122,6 @@ export function createCyclonesLayer({
       const sourceId = captureMatches
         ? nativeHit.sourceId
         : hitTestOverlay(click.position.x, click.position.y)?.sourceId;
-      capturedHit = null;
       if (sourceId === VESSEL_OVERLAY_SOURCE_ID) return;
       const id = rendering?.pickStorm(viewer.scene.pick(click.position));
       if (id && id !== selectedId) layer.setParams({ stormId: id });
