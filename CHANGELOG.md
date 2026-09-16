@@ -23,6 +23,10 @@ Add feed provenance to analyst/view answers and HUD context while retaining exis
 
 Analyst records for loaded satellites, datacenters and dams, with explicit bounded count/rank coverage (Matt Van Horn, #351).
 
+- Add Director import previews, validated scene/shot detail drafts and selected-scene
+  JSON or asset-bundle sharing. Preserve attribution; verify bounded bundle bytes
+  before admission and release staged work on cancellation or teardown.
+
 - Director scene documents now support bounded data-pack manifests, per-shot
   selection and registered GeoJSON/PNG/media loaders with explicit placement,
   visible attribution and cancellation/disposal on Stop or replacement.
@@ -230,6 +234,9 @@ of current runtime behavior, see [`docs/CURRENT-STATE.md`](docs/CURRENT-STATE.md
 ## [Unreleased]
 
 - Add ECMWF IFS model selection to Wind (#464, thanks @beneduzi), with model-scoped forecast-step caches, cancellation of replaced requests, and separate issue/valid timestamps.
+
+- Add bounded Director feature actions with accessible controls, explicit camera/layer admission and cancellation; restore pack geometry on same-shot seek. Preserve existing scenes and content attribution.
+
 
 - Give application request services, terrain/floor caches and annotation lookup state explicit owners and cancellation; share them across controls, layers and voice.
 
