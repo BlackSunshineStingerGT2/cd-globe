@@ -52,12 +52,14 @@ have to move server-side and the key-entry UI has to go.
 
 ## Pending, not yet applied
 
-- **Root-absolute paths to `/models/*.glb` (29 references, `src/data/aircraftClass.js`
-  and neighbours).** Same class of bug as the asset paths above and not yet
-  fixed, because nothing requests them until aircraft render, which needs CD
-  spec Phase 6. They WILL 404 the moment flights land. Fix them with the same
-  `import.meta.env.BASE_URL` treatment in that phase, and prefer one shared
-  helper over 29 edits so the upstream diff stays small.
+- **Root-absolute paths to `/models/*.glb` (29 references).** Left alone. They
+  are still bare `/models/...` in the bundle, and the earlier note here
+  predicted they would 404 under a non-root base. Production says otherwise:
+  with the military layer live, the deploy log shows
+  `GET /globe/models/jet.glb 200`, and `jet.glb` is one of the bare
+  references. Something in the model load path resolves them against the base
+  after all. The mechanism has not been traced, so this stays recorded rather
+  than "fixed": if a model ever does 404, this is the first place to look.
 
 
 - Layer registry gating. `config.layers` is fetched and exposed on
