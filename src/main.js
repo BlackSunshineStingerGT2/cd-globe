@@ -7,6 +7,7 @@ import {
   createCdVoiceTransport,
   createUnavailableVoiceTransport,
 } from './cd/platformConfig.js';
+import { installCdEndpointRewrite } from './cd/endpointMap.js';
 
 // CD: CesiumJS ships with a built-in demo ion token and falls back to it for any
 // ion-backed asset. Blank it before anything touches Cesium so no code path can
@@ -30,6 +31,13 @@ const application = loadPlatformConfig().then((config) => {
   // Exposed so later phases can read what the platform enabled without fetching
   // it again. Frozen because it is shared, not owned.
   window.__cdGlobeConfig = Object.freeze(config);
+
+  // Send upstream's dev-server API paths to the platform's equivalents. Done
+  // before the application is constructed so no module captures the unwrapped
+  // fetch, and driven by config.endpoints so a layer the platform has not
+  // enabled is simply not rewritten: it fails the way it already would rather
+  // than being pointed at an endpoint that would 503.
+  installCdEndpointRewrite(config.endpoints);
 
   // An empty key is what marks the photoreal basemap unavailable, with the
   // reason already surfaced by upstream's map source registry. A visitor who is
