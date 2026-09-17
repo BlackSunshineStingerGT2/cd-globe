@@ -27,6 +27,9 @@ have to move server-side and the key-entry UI has to go.
 | `server/providers/local.js` | Remove the `keySetupEndpoint()` import and its entry in the plugin list. | The endpoint that panel posted to. Removed from local dev as well, so no build of this fork can write a key file. |
 | `build/cesium-base-path-fix.js` | New file. Wraps `vite-plugin-cesium` and relocates its asset copy. | **Load-bearing: without it the globe does not boot.** The plugin builds `CESIUM_BASE_URL` by joining `base`, which is right for the URL in `index.html`, then reuses that same string as a filesystem path. Under `base: '/globe/'` the page requests `/globe/cesium/Cesium.js` while the files land in `dist/globe/cesium/`, so every Cesium asset 404s. The correction has to chain off the plugin's own `closeBundle`, because `closeBundle` is a parallel Rollup hook and a sibling plugin races the copy instead of following it. |
 | `build/vite.js` | Wrap the `cesium()` call in `withCesiumBasePathFix(...)`. | Call site for the above. |
+| `src/cd/platformConfig.js` | New file. Fetches `GET /api/globe/config` and adapts the voice token request to CD's endpoint. | The whole point of the fork: capability comes from the platform at runtime instead of from `import.meta.env` at build time, so one public bundle serves anonymous and allowlisted visitors differently. Fails soft in every direction, because the anonymous tier is the floor rather than an error state. |
+| `src/main.js` | Await the platform config, then pass `googleApiKey` and a voice `backend` built from it. | Bootstrap for the above. Also always supplies a backend rather than letting it default, since upstream's default token endpoint is a dev-server path this platform does not serve. |
+| `src/cd/platformConfig.test.mjs` | New file. | Covers the fail-soft paths, that `voice` honours only a literal `true`, and that the voice request is a header-authenticated POST with `credentials: 'omit'`. |
 | `scripts/package-boundaries.json` | Add `build/cesium-base-path-fix.js` to the `vite-build` package. | `npm run check:boundaries` fails on an unowned module otherwise. |
 | `src/googleServerKey.test.mjs` | Invert the browser-defines assertion, and add a `base` assertion. | Upstream asserts that `GOOGLE_MAPS_API_KEY` from the environment reaches the browser bundle. This fork asserts the opposite, that no credential is ever baked in whatever the environment holds, which doubles as a regression guard: if an upstream merge restores the env read, this test fails. |
 
@@ -47,8 +50,10 @@ have to move server-side and the key-entry UI has to go.
 
 ## Pending, not yet applied
 
-- Runtime config fetch. `src/main.js` currently passes empty strings for both
-  keys. CD spec Phase 3 replaces that with a fetch of `/api/globe/config` and
-  drives the basemap ladder, the mic button, and the layer registry from the
-  response. Until then the globe runs public and keyless on Esri, which is the
-  intended Phase 2 state, not a bug.
+- Layer registry gating. `config.layers` is fetched and exposed on
+  `window.__cdGlobeConfig`, but nothing consumes it yet: the basemap ladder and
+  the mic are driven by the config, the layer list is not. It becomes meaningful
+  in CD spec Phase 6, when `flights`, `military` and `satellites` gain real
+  endpoints. Until then only `earthquakes` works, because that module fetches
+  USGS directly with no CD hop, and the other layers have no backend to call in
+  a production bundle.
