@@ -114,11 +114,24 @@ test('both Places routes select the intended key and keep it out of responses', 
   }
 });
 
-test('browser defines contain the browser key and exclude the server key', () => {
+// CD: upstream asserts here that GOOGLE_MAPS_API_KEY from the environment is
+// injected into the browser bundle. This fork is a public hosted deployment, so
+// it does the opposite: NO provider credential is ever baked in, and the Google
+// key is delivered at runtime by GET /api/globe/config to allowlisted users
+// only. The assertion is inverted to match, which also makes it a regression
+// guard -- if a future upstream merge restores the env read, this fails.
+test('browser defines never carry a provider credential, whatever the env holds', () => {
   withKeys({ server: 'server-secret', browser: 'browser-public' }, () => {
     const defines = config({ mode: 'test' }).define;
-    assert.equal(defines['import.meta.env.GOOGLE_MAPS_API_KEY'], '"browser-public"');
+    assert.equal(defines['import.meta.env.GOOGLE_MAPS_API_KEY'], '""');
+    assert.equal(defines['import.meta.env.CESIUM_ION_TOKEN'], '""');
+    assert.ok(!JSON.stringify(defines).includes('browser-public'));
     assert.ok(!JSON.stringify(defines).includes('server-secret'));
     assert.ok(!Object.keys(defines).some((key) => key.includes('SERVER_API_KEY')));
   });
+});
+
+// CD: the bundle is served under a path prefix, not at the origin root.
+test('build config sets the /globe/ base', () => {
+  assert.equal(config({ mode: 'test' }).base, '/globe/');
 });

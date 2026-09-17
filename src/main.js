@@ -1,9 +1,15 @@
+import * as Cesium from 'cesium';
 import { createStandaloneApplication } from './standalone/application.js';
 import { describeError } from './standalone/errors.js';
 
+// CD: CesiumJS ships with a built-in demo ion token and falls back to it for any
+// ion-backed asset. Blank it before anything touches Cesium so no code path can
+// silently spend someone else's ion quota from a hosted site.
+Cesium.Ion.defaultAccessToken = '';
+
 const application = createStandaloneApplication({
-  googleApiKey: import.meta.env.GOOGLE_MAPS_API_KEY,
-  cesiumToken: import.meta.env.CESIUM_ION_TOKEN,
+  googleApiKey: '',
+  cesiumToken: '',
   allowQaRegistration: import.meta.env.DEV,
 });
 

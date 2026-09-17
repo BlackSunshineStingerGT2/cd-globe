@@ -19,7 +19,8 @@ import { aisLiveProxy } from './vessels/ais-live.js';
 import { trackBackfillProxies } from './aircraft/tracks.js';
 import { openAiRealtimeProxy } from './openai.js';
 import { googlePlacesContextProxy } from './places.js';
-import { keySetupEndpoint } from '../standalone/key-setup.js';
+// CD: keySetupEndpoint removed. It writes provider keys to a local file; this
+// deployment takes its config from the CD platform at runtime instead.
 
 /** Construct the local provider plugins in their established order. */
 function localProviderPlugins() {
@@ -45,7 +46,6 @@ function localProviderPlugins() {
     trackBackfillProxies(),
     openAiRealtimeProxy(),
     googlePlacesContextProxy(),
-    keySetupEndpoint(),
   ];
 }
 

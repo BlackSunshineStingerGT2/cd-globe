@@ -1,5 +1,8 @@
 import { applicationHtmlPlugin } from './application-html.js';
 import cesium from 'vite-plugin-cesium';
+// CD: corrects where vite-plugin-cesium writes its runtime assets under a
+// non-root `base`. See build/cesium-base-path-fix.js.
+import { withCesiumBasePathFix } from './cesium-base-path-fix.js';
 
 /** Build browser assets with explicit inputs; never load environment or providers. */
 export function createBrowserViteConfig({
@@ -11,7 +14,11 @@ export function createBrowserViteConfig({
   port = 4173,
 } = {}) {
   return {
-    plugins: [cesium(), applicationHtmlPlugin(), ...plugins],
+    plugins: [
+      withCesiumBasePathFix(cesium()),
+      applicationHtmlPlugin(),
+      ...plugins,
+    ],
     ...(publicDir === undefined ? {} : { publicDir }),
     server: {
       host: host || 'localhost',
