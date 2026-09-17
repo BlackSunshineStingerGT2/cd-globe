@@ -30,6 +30,7 @@ have to move server-side and the key-entry UI has to go.
 | `src/cd/platformConfig.js` | New file. Fetches `GET /api/globe/config` and adapts the voice token request to CD's endpoint. | The whole point of the fork: capability comes from the platform at runtime instead of from `import.meta.env` at build time, so one public bundle serves anonymous and allowlisted visitors differently. Fails soft in every direction, because the anonymous tier is the floor rather than an error state. |
 | `src/main.js` | Await the platform config, then pass `googleApiKey` and a voice `backend` built from it. | Bootstrap for the above. Also always supplies a backend rather than letting it default, since upstream's default token endpoint is a dev-server path this platform does not serve. |
 | `src/cd/platformConfig.test.mjs` | New file. | Covers the fail-soft paths, that `voice` honours only a literal `true`, and that the voice request is a header-authenticated POST with `credentials: 'omit'`. |
+| `src/logoGaze.js`, `src/voice/control.js`, `src/ui/styles/command-dock-trays.css` | Resolve `logo.svg`, `mic.svg`, `location.svg` and `visual-presets.svg` against the base path. | **Found by loading the deployed page, not by reading code.** Upstream hardcodes root-absolute public asset paths. Vite rewrites those in the HTML attributes it parses, but not in JS strings, not in `data-*` attributes it does not know about, and not in root-absolute CSS `url()`. Under `base: '/globe/'` each of those escapes to the platform root and 404s. JS uses `import.meta.env.BASE_URL`; the CSS masks use `../`, since the bundled stylesheet sits at `/globe/assets/`. |
 | `scripts/package-boundaries.json` | Add `build/cesium-base-path-fix.js` to the `vite-build` package. | `npm run check:boundaries` fails on an unowned module otherwise. |
 | `src/googleServerKey.test.mjs` | Invert the browser-defines assertion, and add a `base` assertion. | Upstream asserts that `GOOGLE_MAPS_API_KEY` from the environment reaches the browser bundle. This fork asserts the opposite, that no credential is ever baked in whatever the environment holds, which doubles as a regression guard: if an upstream merge restores the env read, this test fails. |
 
@@ -49,6 +50,14 @@ have to move server-side and the key-entry UI has to go.
   keeps working against upstream providers while the CD endpoints are built.
 
 ## Pending, not yet applied
+
+- **Root-absolute paths to `/models/*.glb` (29 references, `src/data/aircraftClass.js`
+  and neighbours).** Same class of bug as the asset paths above and not yet
+  fixed, because nothing requests them until aircraft render, which needs CD
+  spec Phase 6. They WILL 404 the moment flights land. Fix them with the same
+  `import.meta.env.BASE_URL` treatment in that phase, and prefer one shared
+  helper over 29 edits so the upstream diff stays small.
+
 
 - Layer registry gating. `config.layers` is fetched and exposed on
   `window.__cdGlobeConfig`, but nothing consumes it yet: the basemap ladder and

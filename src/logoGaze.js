@@ -111,7 +111,14 @@ export function initLogoGaze(root = document) {
 
   const loadInlineLogos = async () => {
     try {
-      const source = logos[0].dataset.logoSrc || '/logo.svg';
+      // CD: resolve against the deployment's base path. Vite rewrites the
+      // href/src attributes in the templates, but not the data-logo-src it
+      // reads here, so under a non-root base (this deployment serves at
+      // /globe/) the raw value points at the platform root and 404s.
+      const source = new URL(
+        (logos[0].dataset.logoSrc || 'logo.svg').replace(/^\//, ''),
+        new URL(import.meta.env.BASE_URL, window.location.href),
+      ).href;
       const response = await window.fetch(source);
       if (!response.ok) return;
       const markup = await response.text();
