@@ -17,7 +17,10 @@ export function createControls({ state: layerState, services, parts, source }) {
 
     icon: '📹',
 
-    source: 'CCTV + Street View fallback',
+    // CD: the Street View fallback is not ported. The platform's frame
+    // proxy serves upstream snapshots only and 404s when there is none,
+    // which is what lets the card show its own no-feed state.
+    source: 'CCTV',
 
     updateInterval: DEFAULT_UPDATE_INTERVAL_MS,
 

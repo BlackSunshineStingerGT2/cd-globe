@@ -54,6 +54,16 @@ const PANEL_ORDER = PANEL_GROUPS.flatMap(({ label, ids }) =>
 const PANEL_POSITIONS = new Map(
   PANEL_ORDER.map(({ id }, index) => [id, index]),
 );
+// CD: layers whose server routes this deployment does not serve yet. Hidden
+// from the panel rather than removed, because the layer itself works fine --
+// only its backend is missing. Deleting the row would mean rebuilding it later;
+// this way re-enabling one is deleting its line from this set.
+//
+// 'military-installations' needs GET /api/military-installations, and
+// 'alpr-cameras' needs POST /api/overpass. Neither exists on the platform, so
+// both controls would sit there reporting a failed fetch.
+const PANEL_HIDDEN = new Set(['military-installations', 'alpr-cameras']);
+
 const PANEL_LABELS = {
   'ais-live-vessels': 'Live Vessels',
   bikeshare: 'Bike Share',
@@ -147,6 +157,7 @@ export class LayerPanel {
     let previousGroup = '';
     for (const layer of layers) {
       if (!layer.showInTogglePanel) continue;
+      if (PANEL_HIDDEN.has(layer.id)) continue;
       const group =
         PANEL_ORDER[PANEL_POSITIONS.get(layer.id)]?.label ?? 'Other layers';
       if (group && group !== previousGroup) {

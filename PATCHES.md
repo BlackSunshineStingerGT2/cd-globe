@@ -50,6 +50,35 @@ have to move server-side and the key-entry UI has to go.
   and it is not part of the production build. It stays so local `npm run dev`
   keeps working against upstream providers while the CD endpoints are built.
 
+## CD follow-up pass (2026-09-20)
+
+- **Cameras layer source label: `CCTV + Street View fallback` -> `CCTV`.**
+  `src/layers/cctv/controls.js`. The Street View fallback is not ported. The
+  platform's frame proxy serves upstream snapshots only, from an allowlist of
+  three hosts, and 404s when there is none. The old label advertised a
+  behaviour this deployment deliberately does not have, and a viewer seeing a
+  placeholder would have assumed it came from Street View.
+
+- **Mapped Installations and Mapped ALPR Cameras hidden from the layer panel.**
+  `src/ui/layerPanel.js`, new `PANEL_HIDDEN` set. Neither backend route exists
+  on the platform: the first needs `GET /api/military-installations`, the
+  second `POST /api/overpass`. Both controls would otherwise sit in the panel
+  reporting a failed fetch. Hidden rather than removed, because the layers
+  themselves are fine and only the backend is missing, so re-enabling one is
+  deleting its id from that set.
+
+- **HUD classification banner and mission designator replaced.**
+  `src/hud.js`. `TOP SECRET // SI-TK // NOFORN` (twice, the top bar and the
+  top-left corner block) becomes `UNCLASSIFIED // OPEN SOURCE // PUBLIC DATA`,
+  and the `KH11-` mission id becomes `CD-GLOBE-`. KH-11 is a real NRO
+  reconnaissance satellite programme, and the markings are real control
+  markings. This renders open-source data on a public site under the operator's
+  own name, so carrying either was a false claim about the data and its
+  provenance. A sweep of the visual styles, military HUD, scene director and
+  recording mode found no other real markings or programme names; the remaining
+  `OPS-41xx` sensor id, orbit and pass numbers are invented telemetry and were
+  left alone.
+
 ## Pending, not yet applied
 
 - **Root-absolute paths to `/models/*.glb` (29 references).** Left alone. They
