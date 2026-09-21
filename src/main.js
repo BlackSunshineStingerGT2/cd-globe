@@ -8,6 +8,7 @@ import {
   createUnavailableVoiceTransport,
 } from './cd/platformConfig.js';
 import { installCdEndpointRewrite } from './cd/endpointMap.js';
+import { initAircraftPane } from './cd/aircraftPane.js';
 
 // CD: CesiumJS ships with a built-in demo ion token and falls back to it for any
 // ion-backed asset. Blank it before anything touches Cesium so no code path can
@@ -72,7 +73,17 @@ const application = loadPlatformConfig().then((config) => {
     voice,
     allowQaRegistration: import.meta.env.DEV,
   });
-  return app.start().then(() => app);
+  return app.start().then((components) => {
+    // CD: the aircraft detail pane. Mounted here, from the viewer the started
+    // app hands back, so no upstream file has to be edited to host it. Guarded:
+    // a pane that fails to mount must never cost the globe itself.
+    try {
+      initAircraftPane({ viewer: components?.scene?.viewer, config });
+    } catch (error) {
+      console.warn('[CD] aircraft pane unavailable:', error);
+    }
+    return app;
+  });
 });
 
 application.catch(reportFailure);

@@ -34,6 +34,10 @@ have to move server-side and the key-entry UI has to go.
 | `src/cd/endpointMap.js` + one call in `src/main.js` | New file. Rewrites upstream's dev-server API paths to the platform's `/api/globe/...` equivalents. | Upstream calls paths its Vite middleware serves; that middleware is not deployed, so on the platform they 404. The platform serves the same data in the same shapes. Rewriting in one table beats patching every call site, several of which build their URL inline in files upstream keeps changing. Driven by `config.endpoints`, so a layer the platform has not enabled is deliberately NOT rewritten and fails as it already would rather than being pointed somewhere that 503s. |
 | `scripts/package-boundaries.json` | Add `build/cesium-base-path-fix.js` to the `vite-build` package. | `npm run check:boundaries` fails on an unowned module otherwise. |
 | `src/googleServerKey.test.mjs` | Invert the browser-defines assertion, and add a `base` assertion. | Upstream asserts that `GOOGLE_MAPS_API_KEY` from the environment reaches the browser bundle. This fork asserts the opposite, that no credential is ever baked in whatever the environment holds, which doubles as a regression guard: if an upstream merge restores the env read, this test fails. |
+| `src/main.js` | Import `initAircraftPane` and call it in the `app.start()` continuation with `components.scene.viewer`, inside a `try`. | Mounts the aircraft detail pane without editing any upstream module: `start()` already resolves to the component set, and `scene` carries the viewer. Guarded so a pane that fails to mount can never cost the globe. This is the only upstream file the pane touches. |
+| `src/cd/aircraftPane.js` + `.test.mjs` | New files. | The aircraft detail pane. See "Aircraft detail pane" below. |
+| `src/data/icaoCountry.js` | New file. | Country of registry from an ICAO 24-bit address, for the pane's Country row. |
+| `scripts/audit-icao-country.mjs` | New file. | Audits that table against live traffic. Not part of the build. |
 
 ## Deliberately NOT changed
 
@@ -78,6 +82,46 @@ have to move server-side and the key-entry UI has to go.
   recording mode found no other real markings or programme names; the remaining
   `OPS-41xx` sensor id, orbit and pass numbers are invented telemetry and were
   left alone.
+
+## Aircraft detail pane (2026-09-21)
+
+ADSBx-style pane for the tracked aircraft, in the right rail beside the compact
+tracked readout, which is untouched. Opens on `gev:awareness-subject-selected`
+for the `flights` and `military` layers; closes on
+`gev:awareness-subject-cleared`, when tracking ends, or on Esc. The Esc listener
+closes the pane and lets the event carry on, so the layers' own Esc (exit
+tracking) still runs. It never takes focus.
+
+**Where the rows come from.** Not from the client's own aircraft records, which
+cannot feed it: `normalizeReadsbAircraft` drops `squawk`, `emergency`, `rssi`,
+`dbFlags` and the signal `type` before any record exists, and civil traffic
+arrives as OpenSky state vectors that never had them. Carrying those through
+would have meant editing the normaliser and both layers' `records.js`. Instead
+CD serves the untouched adsb.lol record at `/api/globe/aircraft/{hex}/live`,
+from caches it already holds, and the pane polls it every 10 s while open.
+Identity and route come from `/api/globe/aircraft/{hex}` (adsbdb). adsb.lol
+never carries `ownOp` or `desc`, so operator and full type exist only there.
+
+**Requests.** Only the CD API. Header and country render at once and cost
+nothing; everything else waits for the selection to hold 400 ms, so stepping
+through contacts fires nothing. Enrichment is memoised per hex and callsign for
+the session, so reselecting an aircraft does not ask again. No photos:
+Planespotters' terms forbid proxying their images and forbid showing them in a
+member-only area, which God's Eye is.
+
+**Styling.** Theme tokens only. The foundation has no red, so the emergency
+squawk reuses `#ff7272` (already the alert colour in `scenes.css`) and a
+descending vertical rate reuses the existing amber `#ffc46b`. No `aria-live`:
+the pane re-renders every poll, and a live region would read all of it aloud
+each time.
+
+**Country table.** Written from the ICAO Annex 10 allocation, not copied. Checked
+against 3,852 live aircraft in 76 countries by comparing each address block
+with the aircraft's registration nationality prefix, an independent source:
+3,840 matched at first, and all 12 misses were one defect, Malta's block ending
+at the original 4D23FF when its aircraft now transmit up to at least 4D2528.
+Widened to 4D2FFF and no further, after which all 3,852 match. Windows draws
+flag emoji as two letters, so the country name is always printed beside it.
 
 ## Pending, not yet applied
 
