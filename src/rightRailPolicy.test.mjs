@@ -44,7 +44,11 @@ test('desktop Display participates in Tactical exclusivity without changing mobi
     ui,
     /panel\.id !== 'pp-toggles' && !panel\.classList\.contains\('collapsed'\)/,
   );
-  assert.match(ui, /if \(exclusive && panel\.classList\.contains\('collapsed'\)\)\s*panel\.setAttribute\('aria-hidden', 'true'\)/);
+  // CD: the collapsed test moved into hiddenWhenCollapsed(), which adds the
+  // data-rail-keep-header exception for the CCTV / aircraft-pane pair. The
+  // rule this asserts is unchanged: a hidden collapsed panel is aria-hidden.
+  assert.match(ui, /if \(exclusive && hiddenWhenCollapsed\(panel\)\)\s*panel\.setAttribute\('aria-hidden', 'true'\)/);
+  assert.match(ui, /panel\.classList\.contains\('collapsed'\) &&\s*!panel\.hasAttribute\?\.\('data-rail-keep-header'\)/);
   assert.match(css, /#right-context-rail\.layout-exclusive > \[data-panel-id\]\.collapsed \{/);
 });
 

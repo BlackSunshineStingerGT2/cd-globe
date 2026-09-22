@@ -30,6 +30,7 @@
  */
 import * as Cesium from 'cesium';
 import { cdAuthToken } from './platformConfig.js';
+import { setText } from './textPatch.js';
 import { countryForHex } from '../data/icaoCountry.js';
 
 const HOLD_MS = 400; // selection must settle before anything is fetched
@@ -221,12 +222,31 @@ export function buildPaneModel({
   return { hex, callsign, military, identity, spatial, signal, links };
 }
 
+const PANE_ID = 'aircraft-pane';
+const CCTV_ID = 'cctv-panel';
+const KEEP_HEADER = 'data-rail-keep-header';
+
+// A right-rail panel like CCTV's, so the rail's own allocator budgets it: it
+// only counts [data-panel-id] children, and it applies the allocated height by
+// id. Without both, the pane was never counted and ran off the bottom of the
+// viewport into the ALT/SUN readout.
 const STYLE = `
-.cd-aircraft-pane{margin-top:8px;padding:12px 14px;border-radius:var(--panel-radius);
-  background:var(--glass-bg);border:1px solid var(--glass-border);
-  color:var(--text-primary);font-family:var(--font-sans);pointer-events:auto;
-  max-height:70vh;overflow-y:auto}
-.cd-aircraft-pane[hidden]{display:none}
+#right-context-rail #${PANE_ID}{width:100%;max-height:100%;pointer-events:auto;
+  box-sizing:border-box;border-radius:var(--panel-radius);background:var(--glass-bg);
+  border:1px solid var(--glass-border);color:var(--text-primary);font-family:var(--font-sans)}
+#${PANE_ID} .cd-ap-inner{display:flex;flex-direction:column;height:100%;min-height:0}
+#${PANE_ID} .panel-header{flex:0 0 auto}
+#${PANE_ID} .cd-ap-body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:0 14px 12px;
+  overscroll-behavior:contain;scrollbar-width:thin}
+#right-context-rail.layout-focus > #${PANE_ID}:not(.collapsed){
+  flex:0 1 var(--right-panel-allocated-height);height:var(--right-panel-allocated-height);
+  min-height:0;max-height:var(--right-panel-allocated-height)}
+#right-context-rail #${PANE_ID}.collapsed{width:var(--right-display-collapsed-width);margin-left:auto}
+#right-context-rail #${PANE_ID}.collapsed .cd-ap-inner{height:50px;min-height:50px}
+#${PANE_ID}.collapsed .cd-ap-body{display:none}
+#right-context-rail.layout-exclusive > [data-panel-id][data-rail-keep-header].collapsed,
+#right-context-rail.layout-focus.layout-exclusive > [data-panel-id][data-rail-keep-header].collapsed{
+  display:block;flex:0 0 auto}
 .cd-ap-head{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .cd-ap-callsign{font-size:20px;font-weight:600;letter-spacing:.04em}
 .cd-ap-badge{font-family:var(--font-mono);font-size:10px;letter-spacing:.12em;
@@ -247,15 +267,25 @@ const STYLE = `
 .cd-ap-pending{color:var(--text-dim);font-size:11px;margin-top:6px}
 `;
 
+const esc = (s) =>
+  String(s).replace(
+    /[&<>"]/g,
+    (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
+  );
+
 /**
  * Mount the pane. Returns a disposer.
  * @param {object} deps
  * @param {object} deps.viewer   Cesium viewer from the started app
+ * @param {object} [deps.shell]  the app shell (controls.styleManager). Its
+ *   setPanelCollapsed keeps collapse buttons, the rail's preferred panel and
+ *   layout scheduling consistent; without it the class is toggled directly.
  * @param {object} [deps.config] platform config (window.__cdGlobeConfig)
  * @param {Function} [deps.fetchImpl]
  */
 export function initAircraftPane({
   viewer,
+  shell = null,
   config = globalThis.window?.__cdGlobeConfig || {},
   fetchImpl = (...a) => fetch(...a),
 } = {}) {
@@ -266,21 +296,117 @@ export function initAircraftPane({
   style.textContent = STYLE;
   document.head.appendChild(style);
 
-  const pane = document.createElement('section');
-  pane.className = 'cd-aircraft-pane';
-  pane.hidden = true;
-  // No aria-live: the pane re-renders on every 10 s poll, and a live region
+  const pane = document.createElement('div');
+  pane.id = PANE_ID;
+  pane.className = 'panel-collapsible cd-aircraft-pane';
+  pane.setAttribute('data-panel-id', PANE_ID);
+  // No aria-live: the pane updates on every 10 s poll, and a live region
   // would have a screen reader read the whole of it out each time.
   pane.setAttribute('aria-label', 'Selected aircraft');
-  // Never takes focus: no tabindex, and nothing here calls focus(). The map
-  // keeps the keyboard, so its own shortcuts, Esc included, keep working.
-  (document.getElementById('right-context-rail') || document.body).appendChild(
-    pane,
-  );
+  pane.innerHTML =
+    '<div class="panel-glow"></div><div class="cd-ap-inner">' +
+    '<div class="panel-header"><span class="panel-title">AIRCRAFT</span>' +
+    '<span class="panel-divider"></span>' +
+    `<button class="panel-collapse-btn" data-collapse-target="${PANE_ID}" ` +
+    'title="Collapse panel">▶</button></div>' +
+    '<div class="cd-ap-body"></div></div>';
+  const titleEl = pane.querySelector('.panel-title');
+  const body = pane.querySelector('.cd-ap-body');
+  const toggleBtn = pane.querySelector('.panel-collapse-btn');
 
   const memo = new Map(); // `${hex}|${callsign}` -> enrichment, this session
   let sel = null; // the current selection, replaced per select
   let generation = 0;
+  let lastSignature = '';
+  let rowEls = new Map(); // row label -> {row, value}
+  let foldedCctv = false; // the pane folded CCTV, so closing should restore it
+
+  const isOpen = (el) =>
+    !!el && el.isConnected !== false && !el.classList.contains('collapsed');
+
+  function syncGlyph() {
+    setText(toggleBtn, pane.classList.contains('collapsed') ? '◀' : '▶');
+  }
+
+  function setCollapsed(id, collapsed) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (typeof shell?.setPanelCollapsed === 'function') {
+      // persist/syncShare off: these moves are automatic, not the viewer's
+      // saved layout, and must not be written into it.
+      shell.setPanelCollapsed(id, collapsed, {
+        explicit: true,
+        persist: false,
+        syncShare: false,
+      });
+    } else {
+      el.classList.toggle('collapsed', collapsed);
+    }
+    if (id === PANE_ID) syncGlyph();
+  }
+
+  function attach() {
+    if (pane.isConnected) return;
+    const rail = document.getElementById('right-context-rail');
+    const cctv = document.getElementById(CCTV_ID);
+    if (rail && cctv && cctv.parentElement === rail) cctv.after(pane);
+    else (rail || document.body).appendChild(pane);
+    // While both are in the rail, whichever is folded stays as its header
+    // (see hiddenWhenCollapsed in rightPanelRail.js). Scoped to the pair's
+    // lifetime, so CCTV alone keeps upstream's exclusive-mode behaviour.
+    pane.setAttribute(KEEP_HEADER, '');
+    cctv?.setAttribute(KEEP_HEADER, '');
+  }
+
+  /** A newly selected aircraft is the active thing: it takes the rail. */
+  function showPane() {
+    attach();
+    if (isOpen(document.getElementById(CCTV_ID))) {
+      setCollapsed(CCTV_ID, true);
+      foldedCctv = true;
+    }
+    if (pane.classList.contains('collapsed')) setCollapsed(PANE_ID, false);
+    else syncGlyph();
+  }
+
+  // Keep the pair mutually exclusive whichever side acts: a camera click, the
+  // CCTV header, or CCTV's own auto-expand on activation all fold the pane.
+  let cctvWasOpen = isOpen(document.getElementById(CCTV_ID));
+  const classObserver =
+    typeof MutationObserver === 'function'
+      ? new MutationObserver(() => {
+          const cctvOpen = isOpen(document.getElementById(CCTV_ID));
+          if (cctvOpen && !cctvWasOpen && isOpen(pane)) {
+            foldedCctv = false;
+            setCollapsed(PANE_ID, true);
+          }
+          cctvWasOpen = cctvOpen;
+          syncGlyph();
+        })
+      : null;
+  const cctvEl = document.getElementById(CCTV_ID);
+  if (classObserver && cctvEl)
+    classObserver.observe(cctvEl, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+  if (classObserver)
+    classObserver.observe(pane, {
+      attributes: true,
+      attributeFilter: ['class'],
+    });
+
+  // A click would move focus off the map onto the button; the map keeps it.
+  toggleBtn?.addEventListener?.('mousedown', (event) => event.preventDefault());
+  toggleBtn?.addEventListener?.('click', (event) => {
+    event.stopPropagation();
+    const expand = pane.classList.contains('collapsed');
+    if (expand && isOpen(document.getElementById(CCTV_ID))) {
+      setCollapsed(CCTV_ID, true);
+      foldedCctv = true;
+    }
+    setCollapsed(PANE_ID, !expand);
+  });
 
   function authHeaders() {
     const token = cdAuthToken();
@@ -316,24 +442,18 @@ export function initAircraftPane({
     }
   }
 
-  function render() {
-    if (!sel) return;
-    const m = buildPaneModel({ ...sel, viewCenter: viewCenter() });
-    const esc = (s) =>
-      String(s).replace(
-        /[&<>"]/g,
-        (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c],
-      );
+  function bodyHtml(m) {
     const rows = (list) =>
       list
         .map(
           ([k, v, cls]) =>
-            `<div class="cd-ap-row ${cls || ''}"><span>${esc(k)}</span><span>${esc(v)}</span></div>`,
+            `<div class="cd-ap-row ${cls || ''}" data-row="${esc(k)}">` +
+            `<span>${esc(k)}</span><span>${esc(v)}</span></div>`,
         )
         .join('');
     const section = (title, list) =>
       list.length ? `<div class="cd-ap-sec">${title}</div>${rows(list)}` : '';
-    pane.innerHTML =
+    return (
       `<div class="cd-ap-head"><span class="cd-ap-callsign">${esc(m.callsign)}</span>` +
       (m.military ? '<span class="cd-ap-badge">MILITARY</span>' : '') +
       '</div>' +
@@ -351,8 +471,50 @@ export function initAircraftPane({
             `<a href="${esc(href)}" target="_blank" rel="noopener noreferrer" tabindex="-1">${esc(t)}</a>`,
         )
         .join('') +
-      '</div>';
-    pane.hidden = false;
+      '</div>'
+    );
+  }
+
+  /**
+   * Rebuild only when the set of rows changes; otherwise patch values in
+   * place. A poll that moves the aircraft changes numbers, not structure, and
+   * patching keeps it to the text nodes that actually changed: the rail
+   * re-lays-out on any mutation inside it, so needless ones cost layout.
+   */
+  function render() {
+    if (!sel) return;
+    const m = buildPaneModel({ ...sel, viewCenter: viewCenter() });
+    setText(titleEl, `AIRCRAFT · ${m.callsign}`);
+    const all = [...m.identity, ...m.spatial, ...m.signal];
+    const signature = JSON.stringify([
+      m.hex,
+      m.military,
+      !!sel.live,
+      all.map((r) => r[0]),
+      m.links.map((l) => l[1]),
+    ]);
+    if (
+      signature !== lastSignature ||
+      typeof body.querySelectorAll !== 'function'
+    ) {
+      body.innerHTML = bodyHtml(m);
+      lastSignature = signature;
+      rowEls = new Map();
+      for (const row of body.querySelectorAll?.('[data-row]') || [])
+        rowEls.set(row.getAttribute('data-row'), {
+          row,
+          value: row.lastElementChild,
+        });
+      return;
+    }
+    setText(body.querySelector('.cd-ap-callsign'), m.callsign);
+    for (const [label, value, cls] of all) {
+      const el = rowEls.get(label);
+      if (!el) continue;
+      setText(el.value, value);
+      const want = `cd-ap-row ${cls || ''}`;
+      if (el.row.className !== want) el.row.className = want;
+    }
   }
 
   function stop() {
@@ -365,8 +527,19 @@ export function initAircraftPane({
   function close() {
     stop();
     sel = null;
-    pane.hidden = true;
-    pane.innerHTML = '';
+    lastSignature = '';
+    rowEls = new Map();
+    body.innerHTML = '';
+    pane.remove();
+    document.getElementById(CCTV_ID)?.removeAttribute(KEEP_HEADER);
+    // Hand the rail back to the camera the pane displaced. A camera the
+    // viewer has since collapsed themselves is not reopened.
+    if (foldedCctv) {
+      foldedCctv = false;
+      const cctv = document.getElementById(CCTV_ID);
+      if (cctv && cctv.classList.contains('collapsed'))
+        setCollapsed(CCTV_ID, false);
+    }
   }
 
   async function pollLive(mine) {
@@ -433,6 +606,7 @@ export function initAircraftPane({
       pollTimer: 0,
     };
     // Header and country show at once; they cost nothing.
+    showPane();
     render();
     // Everything that costs a request waits for the selection to settle, so
     // stepping through contacts fires nothing until the viewer stops on one.
@@ -461,7 +635,7 @@ export function initAircraftPane({
   const onKey = (event) => {
     // Closes the pane and lets the event carry on, so the app's own Esc
     // (exit tracking) still runs. Not handled when typing in a field.
-    if (event.key !== 'Escape' || pane.hidden) return;
+    if (event.key !== 'Escape' || !sel) return;
     const t = event.target;
     if (
       t &&
@@ -487,6 +661,8 @@ export function initAircraftPane({
     window.removeEventListener('gev:awareness-subject-cleared', onCleared);
     window.removeEventListener('keydown', onKey);
     if (typeof removeTracked === 'function') removeTracked();
+    classObserver?.disconnect();
+    document.getElementById(CCTV_ID)?.removeAttribute(KEEP_HEADER);
     pane.remove();
     style.remove();
   };

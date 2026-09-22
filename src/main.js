@@ -78,7 +78,13 @@ const application = loadPlatformConfig().then((config) => {
     // app hands back, so no upstream file has to be edited to host it. Guarded:
     // a pane that fails to mount must never cost the globe itself.
     try {
-      initAircraftPane({ viewer: components?.scene?.viewer, config });
+      initAircraftPane({
+        viewer: components?.scene?.viewer,
+        // The shell's setPanelCollapsed, so the pane folds and unfolds
+        // through the same path as the rail's own panels.
+        shell: components?.controls?.styleManager,
+        config,
+      });
     } catch (error) {
       console.warn('[CD] aircraft pane unavailable:', error);
     }

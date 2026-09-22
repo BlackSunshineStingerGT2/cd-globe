@@ -1,3 +1,4 @@
+import { setText } from '../cd/textPatch.js';
 export function _calBadgeLabel(badge) {
   switch (badge) {
     case 'calibrated':
@@ -11,8 +12,37 @@ export function _calBadgeLabel(badge) {
   }
 }
 
+// CD: while the camera grid bulk-loads, every frame-loaded event notified the
+// panel, and each render touched a dozen nodes inside the right rail, whose
+// layout controller re-measures on any subtree mutation. Coalesce to at most
+// four renders a second during loading. A camera change is never delayed, so
+// clicks and voice selection stay immediate, and the trailing render means the
+// last state always lands.
+const CCTV_LOADING_RENDER_MS = 250;
+
 export function _renderCctvState(state) {
   if (this.destroyed) return;
+  const now = Date.now();
+  const cameraChanged =
+    (state?.activeCameraId || '') !== (this._cctvState?.activeCameraId || '');
+  if (state?.loading?.active && !cameraChanged) {
+    const wait = (this._cctvLastRenderAt || 0) + CCTV_LOADING_RENDER_MS - now;
+    if (wait > 0) {
+      this._cctvPendingState = state;
+      this._cctvRenderTimer ||= setTimeout(() => {
+        this._cctvRenderTimer = null;
+        const pending = this._cctvPendingState;
+        this._cctvPendingState = null;
+        if (pending) this._renderCctvState(pending);
+      }, wait);
+      return;
+    }
+  }
+  // Rendering now supersedes anything queued.
+  clearTimeout(this._cctvRenderTimer);
+  this._cctvRenderTimer = null;
+  this._cctvPendingState = null;
+  this._cctvLastRenderAt = now;
   if (
     !state?.enabled ||
     !this.actions.isEnabled() ||
@@ -50,7 +80,7 @@ export function _renderCctvState(state) {
 
   if (this._cctvEnableBtn) {
     this._cctvEnableBtn.classList.toggle('active', enabled);
-    this._cctvEnableBtn.textContent = enabled ? 'CCTV ON' : 'CCTV OFF';
+    setText(this._cctvEnableBtn, enabled ? 'CCTV ON' : 'CCTV OFF');
   }
 
   if (this._cctvSelect) {
@@ -96,28 +126,31 @@ export function _renderCctvState(state) {
     // (color-coded volumes). The click handler cycles; this renders.
     const mode = state?.coverageMode || (state?.showCoverage ? 'on' : 'off');
     this._cctvCoverageBtn.classList.toggle('active', mode !== 'off');
-    this._cctvCoverageBtn.textContent =
+    setText(
+      this._cctvCoverageBtn,
       mode === 'viewshed'
         ? 'VIEWSHED ON'
         : mode === 'on'
           ? 'COVERAGE ON'
-          : 'COVERAGE OFF';
+          : 'COVERAGE OFF',
+    );
     this._cctvCoverageBtn.disabled = !enabled;
   }
 
   if (this._cctvAutoHopBtn) {
     const autoHop = !!state?.autoHop;
     this._cctvAutoHopBtn.classList.toggle('active', autoHop);
-    this._cctvAutoHopBtn.textContent = autoHop ? 'AUTO HOP ON' : 'AUTO HOP OFF';
+    setText(this._cctvAutoHopBtn, autoHop ? 'AUTO HOP ON' : 'AUTO HOP OFF');
     this._cctvAutoHopBtn.disabled = !enabled;
   }
 
   if (this._cctvProjectionBtn) {
     const showProjection = state?.showProjection !== false;
     this._cctvProjectionBtn.classList.toggle('active', showProjection);
-    this._cctvProjectionBtn.textContent = showProjection
-      ? 'PROJECTION ON'
-      : 'PROJECTION OFF';
+    setText(
+      this._cctvProjectionBtn,
+      showProjection ? 'PROJECTION ON' : 'PROJECTION OFF',
+    );
     this._cctvProjectionBtn.disabled = !enabled;
   }
 
@@ -131,9 +164,10 @@ export function _renderCctvState(state) {
     // promotes to CALIBRATED, RESET CAL clears.
     const badge = activeCamera?.calBadge || null;
     const dirty = !!activeCamera?.calDirty;
-    this._cctvQualityChip.textContent = dirty
-      ? 'CAL · EDITED (UNSAVED)'
-      : `CAL · ${this._calBadgeLabel(badge)}`;
+    setText(
+      this._cctvQualityChip,
+      dirty ? 'CAL · EDITED (UNSAVED)' : `CAL · ${this._calBadgeLabel(badge)}`,
+    );
     this._cctvQualityChip.dataset.calBadge = dirty ? 'edited' : badge || '';
   }
 
@@ -154,13 +188,19 @@ export function _renderCctvState(state) {
         ? this._calBadgeLabel(activeCamera.calBadge)
         : '';
       const projLabel = state?.showProjection !== false ? 'MONITOR' : 'OFF';
-      this._cctvMeta.textContent = `${activeCamera.city} · HDG ${Math.round(activeCamera.headingDeg)}° · FOV ${Math.round(activeCamera.fovDeg)}° · RANGE ${Math.round(activeCamera.rangeM)}m · ${projLabel}${calBadge ? ` · ${calBadge}` : ''} · ${provider}${credit}${statusMsg}`;
+      setText(
+        this._cctvMeta,
+        `${activeCamera.city} · HDG ${Math.round(activeCamera.headingDeg)}° · FOV ${Math.round(activeCamera.fovDeg)}° · RANGE ${Math.round(activeCamera.rangeM)}m · ${projLabel}${calBadge ? ` · ${calBadge}` : ''} · ${provider}${credit}${statusMsg}`,
+      );
     } else if (cameras.length > 0) {
-      this._cctvMeta.textContent = enabled
-        ? `${cameras.length} cameras loaded · click a camera to activate`
-        : `${cameras.length} cameras loaded · enable CCTV to activate`;
+      setText(
+        this._cctvMeta,
+        enabled
+          ? `${cameras.length} cameras loaded · click a camera to activate`
+          : `${cameras.length} cameras loaded · enable CCTV to activate`,
+      );
     } else {
-      this._cctvMeta.textContent = 'Enable CCTV to load camera intersections';
+      setText(this._cctvMeta, 'Enable CCTV to load camera intersections');
     }
   }
 
@@ -199,18 +239,18 @@ export function _typeCctvSummary(text) {
   this._lastCctvSummaryText = nextText;
 
   clearInterval(this._cctvSummaryTypingTimer);
-  this._cctvSummary.textContent = '';
+  setText(this._cctvSummary, '');
   let idx = 0;
   this._cctvSummaryTypingTimer = setInterval(() => {
     if (this.destroyed) return;
     idx += 3;
     if (idx >= nextText.length) {
-      this._cctvSummary.textContent = nextText;
+      setText(this._cctvSummary, nextText);
       clearInterval(this._cctvSummaryTypingTimer);
       this._cctvSummaryTypingTimer = null;
       return;
     }
-    this._cctvSummary.textContent = nextText.slice(0, idx);
+    setText(this._cctvSummary, nextText.slice(0, idx));
   }, 20);
 }
 
@@ -229,7 +269,7 @@ export function _updateCctvSyncChip(loading, enabled) {
     this.actions.setSplitFlapText(this._cctvSyncLabel, 'loading frames');
     // The counter is left plain on purpose: it ticks every few frames
     // during a grid load, and flapping it would read as a slot machine.
-    this._cctvSyncProgress.textContent = `${loaded}/${total}`;
+    setText(this._cctvSyncProgress, `${loaded}/${total}`);
     this._cctvSyncChip.classList.add('visible');
     return;
   }
@@ -238,7 +278,7 @@ export function _updateCctvSyncChip(loading, enabled) {
     // Load just completed — flash the final count, then auto-hide.
     this._cctvChipWasBusy = false;
     this.actions.setSplitFlapText(this._cctvSyncLabel, 'camera grid ready');
-    this._cctvSyncProgress.textContent = `${total}/${total}`;
+    setText(this._cctvSyncProgress, `${total}/${total}`);
     this._cctvSyncChip.classList.add('visible');
     clearTimeout(this._cctvChipHideTimer);
     this._cctvChipHideTimer = window.setTimeout(() => {

@@ -229,6 +229,15 @@
   text-align: right;
 }
 
+/* CD: the chip is a right-rail layout obstacle, so a counter that widens as it
+   gains digits ("9/250" -> "250/250") moved the obstacle and re-laid-out the
+   rail on every tick. Fixed-width digits and room for the longest count keep
+   its box still while it counts. */
+#cctv-sync-progress {
+  font-variant-numeric: tabular-nums;
+  min-width: 8ch;
+}
+
 /* The settled traffic chip carries no progress number — the label's coverage
    figure is the honest one. Collapse the empty slot so the chip closes up
    instead of trailing a 34px stub and its flex gap. */

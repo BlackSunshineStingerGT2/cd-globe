@@ -38,6 +38,12 @@ have to move server-side and the key-entry UI has to go.
 | `src/cd/aircraftPane.js` + `.test.mjs` | New files. | The aircraft detail pane. See "Aircraft detail pane" below. |
 | `src/data/icaoCountry.js` | New file. | Country of registry from an ICAO 24-bit address, for the pane's Country row. |
 | `scripts/audit-icao-country.mjs` | New file. | Audits that table against live traffic. Not part of the build. |
+| `src/ui/cctvPresentation.js`, `src/ui/cctvFrames.js`, `src/ui/cctvCalibration.js` | Route text writes through `setText` (write only when changed). Throttle `_renderCctvState` to 4/s while the grid bulk-loads, never delaying a camera change. | The CCTV flicker. See "CCTV flicker and the right rail" below. |
+| `src/ui/styles/status.css` | `#cctv-sync-progress`: `tabular-nums`, `min-width: 8ch`. | The counter chip is a rail obstacle; a counter that widened as it gained digits moved it and re-laid-out the rail on every tick. |
+| `src/ui/rightPanelRail.js` | Add `hiddenWhenCollapsed(panel)`: collapsed AND not `data-rail-keep-header`. Used in the two exclusive-mode sites. | Lets the CCTV / aircraft-pane pair fold to headers instead of vanishing under the tactical HUD. Unmarked panels behave exactly as upstream. |
+| `src/rightRailPolicy.test.mjs` | Update one source-shape assertion to the new condition, and assert the exception's shape. | The rule it guards is unchanged: a hidden collapsed panel is `aria-hidden`. Left as it was, a visible CCTV header would have stayed `aria-hidden`. |
+| `src/main.js` | Pass `components.controls.styleManager` (the shell) to the pane. | So the pane folds and unfolds through the shell's own `setPanelCollapsed`, like every other rail panel. |
+| `src/cd/textPatch.js` + tests `src/ui/cctvRenderThrottle.test.mjs`, `src/ui/rightPanelRailKeepHeader.test.mjs` | New files. | Write-if-changed helper, and tests for the throttle and the rail exception. |
 
 ## Deliberately NOT changed
 
@@ -122,6 +128,50 @@ with the aircraft's registration nationality prefix, an independent source:
 at the original 4D23FF when its aircraft now transmit up to at least 4D2528.
 Widened to 4D2FFF and no further, after which all 3,852 match. Windows draws
 flag emoji as two letters, so the country name is always printed beside it.
+
+## CCTV flicker and the right rail (2026-09-22)
+
+**The CCTV flicker was not a markup rebuild.** Measured with a MutationObserver
+on `#cctv-panel` during a camera-grid load: 1,457 mutations in 30 s, and the
+panel's allocated height moving between 687, 693 and 707 px. The chain: every
+frame-loaded event rendered the panel; every render assigned `textContent` to
+a dozen elements, which replaces the text node even when the string is
+identical; and `panelLayoutController` observes the whole rail subtree for
+`characterData` and `childList`, so each replacement scheduled a rail layout
+pass that strips and re-applies the panels' allocated heights. Fixes: text is
+written only when it changed (`setText`), renders coalesce to 4/s while
+loading with a trailing render, and the counter's box no longer changes width.
+After, with a live camera showing: the allocated height never changed value,
+and a per-frame sampler saw 0 frames where the preview was not showing, at
+1920x1080 and 1366x768.
+
+Left alone, and why: the summary's typewriter animation still writes every
+20 ms while a summary types out, and the rail still re-measures after each
+write. Every such pass writes back the identical height in the same frame, so
+nothing moves on screen; it costs layout work, not pixels. Quieting it means
+changing what the rail's observer listens to, which is upstream's layout
+policy rather than a panel fix.
+
+**The aircraft pane collided with the ALT/SUN readout because the rail never
+counted it.** The rail only budgets children marked `[data-panel-id]`, and
+applies allocated heights by id. The pane had neither, so it ran off the
+bottom. It is now a real rail panel (`#aircraft-pane`, `data-panel-id`,
+standard `panel-collapsible` header), in the rail only while an aircraft is
+selected, placed after CCTV. The rail's existing obstacle avoidance then keeps
+it clear of `#intel-hud .hud-bottom-right` with no new geometry code.
+
+**The pair is mutually exclusive, through the shell's own `setPanelCollapsed`.**
+Selecting an aircraft folds CCTV to its header; a camera click, CCTV's header,
+or CCTV's own auto-expand folds the pane. Closing the pane restores CCTV if the
+pane was what folded it. Automatic moves pass `persist: false` and
+`syncShare: false`, so they never enter the viewer's saved layout.
+
+Under the tactical HUD upstream hides every collapsed panel once one is
+expanded, and drops it from the height budget. That would have made the folded
+one vanish rather than show its header, and forcing it visible in CSS alone
+would have let the expanded panel grow back over it. So both carry
+`data-rail-keep-header` while the pane is in the rail, and
+`hiddenWhenCollapsed` keeps a marked panel visible and budgeted.
 
 ## Pending, not yet applied
 

@@ -1,3 +1,4 @@
+import { setText } from '../cd/textPatch.js';
 /** Shortest-wrap signed degrees, for heading offsets typed as absolute values. */
 const signedNormalizeDeg = (deg) => ((((deg + 180) % 360) + 360) % 360) - 180;
 
@@ -162,7 +163,7 @@ export function _syncCctvCalReadout(enabled, activeCamera) {
   if (this._cctvAdjustBtn) {
     const adjustOn = !!this._cctvState?.calibrationMode;
     this._cctvAdjustBtn.classList.toggle('active', adjustOn && canCalibrate);
-    this._cctvAdjustBtn.textContent = adjustOn ? 'ADJUST ON' : 'ADJUST';
+    setText(this._cctvAdjustBtn, adjustOn ? 'ADJUST ON' : 'ADJUST');
     this._cctvAdjustBtn.disabled = !canCalibrate;
   }
   if (this._cctvCalReadout) {
@@ -173,9 +174,12 @@ export function _syncCctvCalReadout(enabled, activeCamera) {
       const field = CCTV_CAL_FIELDS[chip.dataset.calField];
       if (!field) continue;
       const value = canCalibrate ? field.get(activeCamera) : null;
-      chip.textContent = Number.isFinite(value)
-        ? `${field.label} ${Number(value).toFixed(field.decimals)}${field.unit}`
-        : `${field.label} --`;
+      setText(
+        chip,
+        Number.isFinite(value)
+          ? `${field.label} ${Number(value).toFixed(field.decimals)}${field.unit}`
+          : `${field.label} --`,
+      );
       chip.disabled = !canCalibrate;
     }
   }

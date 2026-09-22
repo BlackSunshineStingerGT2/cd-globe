@@ -217,28 +217,174 @@ test('flag emoji is two regional indicators', () => {
 
 // ---- the mounted pane: requests, not rendering -----------------------------
 
-function fakeDom() {
-  const el = () => ({
-    hidden: false,
-    innerHTML: '',
-    textContent: '',
-    className: '',
-    children: [],
-    setAttribute() {},
-    appendChild(c) {
-      this.children.push(c);
-      return c;
-    },
-    remove() {},
-  });
+// A DOM just deep enough for the pane: ids, classList, attach/detach, and a
+// MutationObserver that fires on class changes, so the rail's mutual-collapse
+// rule is exercised rather than skipped.
+function fakeDom({ cctvCollapsed = true } = {}) {
+  const observers = [];
+  const byId = new Map();
+  const notify = (target) => {
+    for (const o of observers)
+      if (o.targets.has(target))
+        o.callback([{ target, attributeName: 'class' }]);
+  };
+  const el = (tag = 'div') => {
+    const node = {
+      tagName: tag.toUpperCase(),
+      children: [],
+      parentElement: null,
+      attrs: {},
+      _id: '',
+      _text: '',
+      innerHTML: '',
+      get id() {
+        return this._id;
+      },
+      set id(v) {
+        this._id = v;
+        byId.set(v, this);
+      },
+      get textContent() {
+        return this._text;
+      },
+      set textContent(v) {
+        this._text = String(v);
+      },
+      get isConnected() {
+        let n = this;
+        while (n.parentElement) n = n.parentElement;
+        return n === root;
+      },
+      classList: null,
+      setAttribute(k, v) {
+        this.attrs[k] = String(v);
+      },
+      getAttribute(k) {
+        return this.attrs[k] ?? null;
+      },
+      hasAttribute(k) {
+        return k in this.attrs;
+      },
+      removeAttribute(k) {
+        delete this.attrs[k];
+      },
+      appendChild(c) {
+        c.parentElement?.children.splice(
+          c.parentElement.children.indexOf(c),
+          1,
+        );
+        this.children.push(c);
+        c.parentElement = this;
+        return c;
+      },
+      after(c) {
+        const p = this.parentElement;
+        c.parentElement?.children.splice(
+          c.parentElement.children.indexOf(c),
+          1,
+        );
+        p.children.splice(p.children.indexOf(this) + 1, 0, c);
+        c.parentElement = p;
+      },
+      remove() {
+        const p = this.parentElement;
+        if (p) p.children.splice(p.children.indexOf(this), 1);
+        this.parentElement = null;
+      },
+      addEventListener() {},
+      querySelector(sel) {
+        return (this._parts || {})[sel] || null;
+      },
+    };
+    const classes = new Set();
+    node.classList = {
+      contains: (c) => classes.has(c),
+      add: (...cs) => {
+        const before = classes.size;
+        cs.forEach((c) => classes.add(c));
+        if (classes.size !== before) notify(node);
+      },
+      remove: (...cs) => {
+        const before = classes.size;
+        cs.forEach((c) => classes.delete(c));
+        if (classes.size !== before) notify(node);
+      },
+      toggle: (c, force) => {
+        const want = force === undefined ? !classes.has(c) : !!force;
+        if (want === classes.has(c)) return want;
+        if (want) classes.add(c);
+        else classes.delete(c);
+        notify(node);
+        return want;
+      },
+    };
+    Object.defineProperty(node, 'className', {
+      get: () => [...classes].join(' '),
+      set: (v) => {
+        classes.clear();
+        String(v)
+          .split(/\s+/)
+          .filter(Boolean)
+          .forEach((c) => classes.add(c));
+      },
+    });
+    return node;
+  };
+
+  const root = el('html');
   const rail = el();
+  rail.id = 'right-context-rail';
+  root.appendChild(rail);
+  const cctv = el();
+  cctv.id = 'cctv-panel';
+  if (cctvCollapsed) cctv.classList.add('collapsed');
+  rail.appendChild(cctv);
+
+  globalThis.MutationObserver = class {
+    constructor(cb) {
+      this.callback = cb;
+      this.targets = new Set();
+      observers.push(this);
+    }
+    observe(t) {
+      this.targets.add(t);
+    }
+    disconnect() {
+      this.targets.clear();
+    }
+  };
   globalThis.document = {
     head: el(),
-    createElement: el,
-    getElementById: (id) => (id === 'right-context-rail' ? rail : null),
+    body: root,
+    createElement: (tag) => {
+      const n = el(tag);
+      // The pane looks these up once after building its shell markup.
+      n._parts = {
+        '.panel-title': el('span'),
+        '.cd-ap-body': el(),
+        '.panel-collapse-btn': el('button'),
+      };
+      return n;
+    },
+    getElementById: (id) => {
+      const n = byId.get(id);
+      return n && n.isConnected ? n : null;
+    },
   };
   globalThis.window = new EventTarget();
-  return rail;
+  return { rail, cctv };
+}
+
+/** Records setPanelCollapsed calls and applies them as the real shell does. */
+function fakeShell() {
+  const calls = [];
+  return {
+    calls,
+    setPanelCollapsed(id, collapsed, opts) {
+      calls.push([id, collapsed, opts]);
+      document.getElementById(id)?.classList.toggle('collapsed', collapsed);
+    },
+  };
 }
 
 function fakeViewer() {
@@ -347,6 +493,193 @@ test('the pane only ever requests the CD API', async () => {
     await settle();
     assert.ok(urls.length >= 3);
     for (const u of urls) assert.match(u, /^\/api\/globe\/aircraft\//, u);
+    dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+// ---- the pane as a right-rail panel ---------------------------------------
+
+const settleAll = async () => {
+  for (let i = 0; i < 4; i++) await settle();
+};
+
+test('the pane joins the rail as a [data-panel-id] panel, after CCTV', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    const { rail, cctv } = fakeDom();
+    const { fetchImpl } = recordingFetch();
+    const dispose = initAircraftPane({
+      viewer: fakeViewer(),
+      fetchImpl,
+      shell: fakeShell(),
+      config: { endpoints: { aircraft: '/api/globe/aircraft' } },
+    });
+    assert.equal(
+      rail.children.length,
+      1,
+      'nothing in the rail before a selection',
+    );
+    select('ae119b');
+    const pane = document.getElementById('aircraft-pane');
+    assert.ok(pane, 'pane attached on selection');
+    // The rail's allocator only budgets children carrying data-panel-id.
+    assert.equal(pane.getAttribute('data-panel-id'), 'aircraft-pane');
+    assert.deepEqual(
+      rail.children.map((c) => c.id),
+      ['cctv-panel', 'aircraft-pane'],
+    );
+    assert.equal(pane.classList.contains('collapsed'), false);
+    dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('selecting an aircraft folds an open CCTV panel to its header', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    const { cctv } = fakeDom({ cctvCollapsed: false });
+    const shell = fakeShell();
+    const { fetchImpl } = recordingFetch();
+    const dispose = initAircraftPane({
+      viewer: fakeViewer(),
+      fetchImpl,
+      shell,
+      config: { endpoints: { aircraft: '/api/globe/aircraft' } },
+    });
+    select('ae119b');
+    assert.equal(cctv.classList.contains('collapsed'), true, 'CCTV folded');
+    assert.equal(
+      document.getElementById('aircraft-pane').classList.contains('collapsed'),
+      false,
+    );
+    // Automatic moves are never written into the viewer's saved layout.
+    for (const [, , opts] of shell.calls) {
+      assert.equal(opts.persist, false);
+      assert.equal(opts.syncShare, false);
+    }
+    dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('expanding CCTV folds the pane; the two are never both open', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    const { cctv } = fakeDom();
+    const shell = fakeShell();
+    const { fetchImpl } = recordingFetch();
+    const dispose = initAircraftPane({
+      viewer: fakeViewer(),
+      fetchImpl,
+      shell,
+      config: { endpoints: { aircraft: '/api/globe/aircraft' } },
+    });
+    select('ae119b');
+    const pane = document.getElementById('aircraft-pane');
+    assert.equal(pane.classList.contains('collapsed'), false);
+    // A camera click: CCTV's own code expands its panel.
+    shell.setPanelCollapsed('cctv-panel', false, { explicit: true });
+    assert.equal(cctv.classList.contains('collapsed'), false);
+    assert.equal(
+      pane.classList.contains('collapsed'),
+      true,
+      'pane folded to its header',
+    );
+    dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('closing the pane hands the rail back to the camera it displaced', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    const { rail, cctv } = fakeDom({ cctvCollapsed: false });
+    const { fetchImpl } = recordingFetch();
+    const dispose = initAircraftPane({
+      viewer: fakeViewer(),
+      fetchImpl,
+      shell: fakeShell(),
+      config: { endpoints: { aircraft: '/api/globe/aircraft' } },
+    });
+    select('ae119b');
+    assert.equal(cctv.classList.contains('collapsed'), true);
+    window.dispatchEvent(
+      new CustomEvent('gev:awareness-subject-cleared', {
+        detail: { layerId: 'military' },
+      }),
+    );
+    assert.equal(
+      document.getElementById('aircraft-pane'),
+      null,
+      'pane left the rail',
+    );
+    assert.deepEqual(
+      rail.children.map((c) => c.id),
+      ['cctv-panel'],
+    );
+    assert.equal(cctv.classList.contains('collapsed'), false, 'CCTV restored');
+    dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('a CCTV panel the viewer collapsed themselves is not reopened on close', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    const { cctv } = fakeDom({ cctvCollapsed: true });
+    const { fetchImpl } = recordingFetch();
+    const dispose = initAircraftPane({
+      viewer: fakeViewer(),
+      fetchImpl,
+      shell: fakeShell(),
+      config: { endpoints: { aircraft: '/api/globe/aircraft' } },
+    });
+    select('ae119b');
+    window.dispatchEvent(
+      new CustomEvent('gev:awareness-subject-cleared', {
+        detail: { layerId: 'military' },
+      }),
+    );
+    assert.equal(cctv.classList.contains('collapsed'), true);
+    dispose();
+  } finally {
+    mock.timers.reset();
+  }
+});
+
+test('the pair keeps its headers only while both are in the rail', async () => {
+  mock.timers.enable({ apis: ['setTimeout', 'setInterval'] });
+  try {
+    const { cctv } = fakeDom({ cctvCollapsed: false });
+    const { fetchImpl } = recordingFetch();
+    const dispose = initAircraftPane({
+      viewer: fakeViewer(),
+      fetchImpl,
+      shell: fakeShell(),
+      config: { endpoints: { aircraft: '/api/globe/aircraft' } },
+    });
+    assert.equal(
+      cctv.hasAttribute('data-rail-keep-header'),
+      false,
+      'untouched before',
+    );
+    select('ae119b');
+    const pane = document.getElementById('aircraft-pane');
+    assert.equal(pane.hasAttribute('data-rail-keep-header'), true);
+    assert.equal(cctv.hasAttribute('data-rail-keep-header'), true);
+    window.dispatchEvent(
+      new CustomEvent('gev:awareness-subject-cleared', {
+        detail: { layerId: 'military' },
+      }),
+    );
+    // CCTV alone goes back to upstream's exclusive-mode behaviour.
+    assert.equal(cctv.hasAttribute('data-rail-keep-header'), false);
     dispose();
   } finally {
     mock.timers.reset();

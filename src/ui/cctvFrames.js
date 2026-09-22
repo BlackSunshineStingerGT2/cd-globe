@@ -1,3 +1,4 @@
+import { setText } from '../cd/textPatch.js';
 export function _clearCctvFrame() {
   this._cctvFrameRequestToken += 1;
   if (this._cctvFramePreloader) {
@@ -86,19 +87,19 @@ export function _settleCctvFrame(token, src, ok) {
 export function _syncCctvSourceBadge(activeCamera, enabled) {
   if (!this._cctvSourceBadge) return;
   if (!enabled || !activeCamera) {
-    this._cctvSourceBadge.textContent = 'SOURCE · UNKNOWN';
+    setText(this._cctvSourceBadge, 'SOURCE · UNKNOWN');
     this._cctvSourceBadge.dataset.frameState = 'idle';
     return;
   }
   const hasDisplayedFrame =
     this._cctvFrameWrap?.classList.contains('has-frame');
   if (this._cctvFrame?.dataset.loading === 'true' && !hasDisplayedFrame) {
-    this._cctvSourceBadge.textContent = 'FRAME · LOADING';
+    setText(this._cctvSourceBadge, 'FRAME · LOADING');
     this._cctvSourceBadge.dataset.frameState = 'loading';
     return;
   }
   if (this._cctvFrame?.dataset.error === 'true' && !hasDisplayedFrame) {
-    this._cctvSourceBadge.textContent = 'FRAME · UNAVAILABLE';
+    setText(this._cctvSourceBadge, 'FRAME · UNAVAILABLE');
     this._cctvSourceBadge.dataset.frameState = 'error';
     return;
   }
@@ -106,6 +107,6 @@ export function _syncCctvSourceBadge(activeCamera, enabled) {
     activeCamera.sourceKind || activeCamera.feedType || 'unknown',
   ).toUpperCase();
   const status = String(activeCamera.sourceStatus || 'unknown').toUpperCase();
-  this._cctvSourceBadge.textContent = `${kind} · ${status}`;
+  setText(this._cctvSourceBadge, `${kind} · ${status}`);
   this._cctvSourceBadge.dataset.frameState = 'ready';
 }

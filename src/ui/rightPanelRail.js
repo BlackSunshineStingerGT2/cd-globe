@@ -25,6 +25,24 @@ import {
  * @param {Function} options.readDisplayScrollTop Read the caller's scroll restoration value.
  * @param {Document} [options.documentRef] Document supplying current keyboard focus.
  */
+/**
+ * CD: whether exclusive mode hides this panel. Upstream hides every collapsed
+ * panel once any panel is expanded under the tactical HUD. CD keeps one
+ * exception: a panel marked `data-rail-keep-header` stays as its header, and
+ * is counted in the height budget, so the expanded panel above it cannot grow
+ * over it. The aircraft detail pane marks itself and CCTV only while both are
+ * in the rail, so the pair folds to headers instead of vanishing; every other
+ * panel keeps upstream's behaviour.
+ * @param {Element} panel
+ * @returns {boolean}
+ */
+export function hiddenWhenCollapsed(panel) {
+  return (
+    panel.classList.contains('collapsed') &&
+    !panel.hasAttribute?.('data-rail-keep-header')
+  );
+}
+
 export function layoutRightPanelRail({
   stack,
   obstacles,
@@ -64,7 +82,7 @@ export function layoutRightPanelRail({
   });
   stack.classList.toggle('layout-exclusive', exclusive);
   for (const panel of panels) {
-    if (exclusive && panel.classList.contains('collapsed'))
+    if (exclusive && hiddenWhenCollapsed(panel))
       panel.setAttribute('aria-hidden', 'true');
     else panel.removeAttribute('aria-hidden');
   }
@@ -114,7 +132,7 @@ export function layoutRightPanelRail({
   }
 
   const visiblePanels = panels.filter(
-    (panel) => !exclusive || !panel.classList.contains('collapsed'),
+    (panel) => !exclusive || !hiddenWhenCollapsed(panel),
   );
 
   const displayScrollTop = readDisplayScrollTop();
