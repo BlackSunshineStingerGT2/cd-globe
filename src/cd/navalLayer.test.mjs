@@ -7,8 +7,17 @@ import {
   initNavalLayer,
   ringPoints,
   shortName,
+  zoomScale,
 } from './navalLayer.js';
-import { ICON_KEYS, iconKey, iconSize, iconUri } from './navalIcons.js';
+import {
+  ICON_KEYS,
+  hullNumber,
+  iconKey,
+  iconSize,
+  iconUri,
+  selectionSize,
+  selectionUri,
+} from './navalIcons.js';
 
 test('shortName drops the USS prefix and uppercases', () => {
   assert.equal(shortName({ name: 'USS John Paul Jones' }), 'JOHN PAUL JONES');
@@ -89,4 +98,46 @@ test('nothing mounts when the platform does not advertise the endpoint', () => {
   const dispose = initNavalLayer({ viewer: {}, config: { endpoints: {} } });
   assert.equal(typeof dispose, 'function');
   dispose();
+});
+
+test('hullNumber takes the digits a ship paints on its deck', () => {
+  assert.equal(hullNumber({ hull: 'CVN-73' }), '73');
+  assert.equal(hullNumber({ hull: 'ESB-5' }), '5');
+  assert.equal(hullNumber({ hull: 'DDG-053' }), '53');
+  assert.equal(hullNumber({ hull: 'UNKNOWN' }), '');
+  assert.equal(hullNumber(null), '');
+});
+
+test('hull numbers are painted per ship and only digits reach the SVG', () => {
+  const plain = decodeURIComponent(iconUri('carrier').split(',')[1]);
+  const numbered = decodeURIComponent(iconUri('carrier', '73').split(',')[1]);
+  assert.doesNotMatch(plain, /<text/);
+  assert.match(numbered, />73<\/text>/);
+  const hostile = decodeURIComponent(
+    iconUri('carrier', '<script>9').split(',')[1],
+  );
+  assert.doesNotMatch(hostile, /script/);
+  assert.match(hostile, />9<\/text>/);
+});
+
+test('selection brackets wrap the icon with a margin', () => {
+  for (const key of ICON_KEYS) {
+    const icon = iconSize(key);
+    const sel = selectionSize(key);
+    assert.ok(sel.width > icon.width && sel.height > icon.height);
+    const svg = decodeURIComponent(
+      selectionUri(sel.width, sel.height).split(',')[1],
+    );
+    assert.match(svg, /^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+    assert.equal((svg.match(/<path /g) || []).length, 4, 'four corners');
+  }
+});
+
+test('zoomScale keeps theatre size and grows up close, within bounds', () => {
+  assert.ok(Math.abs(zoomScale(1e6) - 1.25) < 1e-9);
+  assert.ok(Math.abs(zoomScale(1e7) - 0.5) < 1e-9);
+  assert.ok(Math.abs(zoomScale(1e5) - 2) < 1e-9);
+  assert.equal(zoomScale(100), 3);
+  assert.equal(zoomScale(1e9), 0.45);
+  assert.ok(zoomScale(2e5) > zoomScale(8e5));
 });

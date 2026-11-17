@@ -206,13 +206,21 @@ is built so it can never read as live: icons point bow-north and never move,
 every ship has a dashed error ring, stale reports go grey, and the panel leads
 with "reported sea areas, not fixes".
 
-- **Glyphs** (`navalIcons.js`) follow `src/data/aircraftIcons.js`: white SVG
-  silhouettes with a dark hairline, tinted through `billboard.color`, rendered
-  at 4x and down-sampled. One planform per class in theatre (carrier, flat-deck
-  amphib, dock ship, cruiser, destroyer, ESB, LCS), each with its own viewBox
-  width so narrow hulls fill their billboard.
-- **Globe**: one BillboardCollection, one LabelCollection, one PolylineCollection
-  for the rings. Picking uses plain-object ids (`{ cdNavalHull }`) and its own
+- **Ship art** (`navalIcons.js`): full-colour top-down renders in Navy haze
+  gray, not white-for-tinting like the aircraft glyphs: nonskid flight decks,
+  white and yellow deck markings, parked aircraft, missile cells, gun mounts,
+  radar faces, and each ship's own hull number painted on deck. One planform
+  per class in theatre (carrier, flat-deck amphib, dock ship, cruiser,
+  destroyer, ESB, LCS), each with its own viewBox width, rasterised at 6x.
+  Because the art is in colour, state never recolours it: staleness darkens
+  it through `billboard.color`, and selection is a separate HUD-style bracket
+  billboard drawn under the ship.
+- **Scale** follows camera height on a log curve (`zoomScale`): unchanged at
+  theatre zoom, up to 3x right over a ship so the deck detail can be read.
+  `NearFarScalar` is linear in distance and cannot do both. Label offsets
+  follow the scaled hull width.
+- **Globe**: BillboardCollections for the ships and the selection bracket, one
+  LabelCollection, one PolylineCollection for the rings. Picking uses plain-object ids (`{ cdNavalHull }`) and its own
   LEFT_CLICK handler, so it does not touch entity selection or tracking.
 - **Panel**: an ordinary `[data-panel-id]` child of `#left-panel-stack`, so the
   layout engine and accordion treat it like DATA LAYERS and SCENES. Collapse goes
