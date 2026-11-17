@@ -44,6 +44,8 @@ have to move server-side and the key-entry UI has to go.
 | `src/rightRailPolicy.test.mjs` | Update one source-shape assertion to the new condition, and assert the exception's shape. | The rule it guards is unchanged: a hidden collapsed panel is `aria-hidden`. Left as it was, a visible CCTV header would have stayed `aria-hidden`. |
 | `src/main.js` | Pass `components.controls.styleManager` (the shell) to the pane. | So the pane folds and unfolds through the shell's own `setPanelCollapsed`, like every other rail panel. |
 | `src/cd/textPatch.js` + tests `src/ui/cctvRenderThrottle.test.mjs`, `src/ui/rightPanelRailKeepHeader.test.mjs` | New files. | Write-if-changed helper, and tests for the throttle and the rail exception. |
+| `src/main.js` | Import `initNavalLayer` and call it in the `app.start()` continuation with the viewer, the shell and the platform config, inside its own `try`. | Mounts the US Navy layer the same way as the aircraft pane: no upstream module hosts it, and a layer that fails to mount can never cost the globe. Mounts nothing unless `config.endpoints.naval` is advertised. |
+| `src/cd/navalLayer.js`, `src/cd/navalIcons.js` + `src/cd/navalLayer.test.mjs` | New files. | The US Navy reported-positions layer and its left-stack panel. See "US Navy layer" below. |
 
 ## Deliberately NOT changed
 
@@ -192,3 +194,30 @@ would have let the expanded panel grow back over it. So both carry
   endpoints. Until then only `earthquakes` works, because that module fetches
   USGS directly with no CD hop, and the other layers have no backend to call in
   a production bundle.
+
+## US Navy layer
+
+Reported positions of US warships around the Gulf, from
+`GET /api/globe/naval` (advertised as `config.endpoints.naval`). The platform
+serves the same hand-kept list StraitWatch draws, so the two maps cannot
+disagree. Warships do not broadcast AIS in theatre, so every position is a
+plotting point inside a reported sea area with an error radius, and the layer
+is built so it can never read as live: icons point bow-north and never move,
+every ship has a dashed error ring, stale reports go grey, and the panel leads
+with "reported sea areas, not fixes".
+
+- **Glyphs** (`navalIcons.js`) follow `src/data/aircraftIcons.js`: white SVG
+  silhouettes with a dark hairline, tinted through `billboard.color`, rendered
+  at 4x and down-sampled. One planform per class in theatre (carrier, flat-deck
+  amphib, dock ship, cruiser, destroyer, ESB, LCS), each with its own viewBox
+  width so narrow hulls fill their billboard.
+- **Globe**: one BillboardCollection, one LabelCollection, one PolylineCollection
+  for the rings. Picking uses plain-object ids (`{ cdNavalHull }`) and its own
+  LEFT_CLICK handler, so it does not touch entity selection or tracking.
+- **Panel**: an ordinary `[data-panel-id]` child of `#left-panel-stack`, so the
+  layout engine and accordion treat it like DATA LAYERS and SCENES. Collapse goes
+  through the shell's `setPanelCollapsed` with `persist` and `syncShare` off.
+  Card styling is copied from `.data-panel-inner` rather than reusing that class,
+  so no upstream selector starts matching it.
+- **Preferences** (ships, rings, Mediterranean) are per browser in
+  `localStorage` under `cd.naval.prefs`, guarded.

@@ -9,6 +9,7 @@ import {
 } from './cd/platformConfig.js';
 import { installCdEndpointRewrite } from './cd/endpointMap.js';
 import { initAircraftPane } from './cd/aircraftPane.js';
+import { initNavalLayer } from './cd/navalLayer.js';
 
 // CD: CesiumJS ships with a built-in demo ion token and falls back to it for any
 // ion-backed asset. Blank it before anything touches Cesium so no code path can
@@ -87,6 +88,18 @@ const application = loadPlatformConfig().then((config) => {
       });
     } catch (error) {
       console.warn('[CD] aircraft pane unavailable:', error);
+    }
+    // CD: US Navy reported positions, with a panel in the left stack. Same
+    // mounting rule as the pane: from the started app, and never at the cost
+    // of the globe. Mounts nothing unless the platform advertises the endpoint.
+    try {
+      initNavalLayer({
+        viewer: components?.scene?.viewer,
+        shell: components?.controls?.styleManager,
+        config,
+      });
+    } catch (error) {
+      console.warn('[CD] naval layer unavailable:', error);
     }
     return app;
   });
