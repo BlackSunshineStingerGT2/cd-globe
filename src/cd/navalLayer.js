@@ -29,7 +29,14 @@
 import * as Cesium from 'cesium';
 import { cdAuthToken } from './platformConfig.js';
 import { setText } from './textPatch.js';
-import { iconKey, iconSize, iconUri } from './navalIcons.js';
+import {
+  hullNumber,
+  iconKey,
+  iconSize,
+  iconUri,
+  selectionSize,
+  selectionUri,
+} from './navalIcons.js';
 
 const PANEL_ID = 'cd-naval-panel';
 const POLL_MS = 10 * 60 * 1000; // the list changes weekly
@@ -46,6 +53,9 @@ const PREFS_KEY = 'cd.naval.prefs';
 const SHIP = Cesium.Color.fromCssColorString('#e3ebf5');
 const STALE = Cesium.Color.fromCssColorString('#8d99a8');
 const ACCENT = Cesium.Color.fromCssColorString('#00d4ff');
+// The renders are full colour, so they are never tinted to show state: a
+// stale report darkens and fades the paintwork, and selection gets brackets.
+const ART_STALE = new Cesium.Color(0.55, 0.58, 0.62, 0.85);
 
 const TYPE_LABEL = {
   carrier: 'Aircraft carrier',
@@ -119,6 +129,20 @@ export function ringPoints(lat, lon, radiusKm, n = 72) {
     ]);
   }
   return out;
+}
+
+/**
+ * Icon scale for a camera height. Log-linear: 1.25 at 1,000 km (the theatre
+ * view), 0.5 at 10,000 km, about 2 at 100 km and capped at 3 when the camera
+ * is right over a ship, so the deck detail is there to see up close without
+ * the fleet turning into a blanket at theatre zoom. Cesium's NearFarScalar
+ * cannot do this: it interpolates linearly in distance, so any near value big
+ * enough for a close look also inflates the theatre view.
+ */
+export function zoomScale(heightM) {
+  const h = Math.max(1, Number(heightM) || 1);
+  const s = 1.25 - 0.75 * Math.log10(h / 1e6);
+  return Math.min(3, Math.max(0.45, s));
 }
 
 /** Ships grouped by reported area, areas in first-seen order, ships by type. */
@@ -222,7 +246,7 @@ const STYLE = `
   font:inherit;text-align:left;cursor:pointer}
 .cd-nv-ship:hover{background:rgba(255,255,255,.04)}
 .cd-nv-ship.on{background:rgba(0,212,255,.08)}
-.cd-nv-ship img{width:9px;height:24px;object-fit:contain;flex:0 0 auto}
+.cd-nv-ship img{width:12px;height:30px;object-fit:contain;flex:0 0 auto}
 .cd-nv-ship .h{font-family:var(--font-mono);font-size:10.5px;color:var(--text-secondary);width:58px;flex:0 0 auto}
 .cd-nv-ship .n{flex:1 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cd-nv-ship .a{font-family:var(--font-mono);font-size:10px;color:var(--text-dim)}
@@ -258,9 +282,20 @@ export function initNavalLayer({
 
   // ---- globe primitives ---------------------------------------------------
   const rings = scene.primitives.add(new Cesium.PolylineCollection());
+  // Brackets first so they draw under the ship they frame.
+  const brackets = scene.primitives.add(
+    new Cesium.BillboardCollection({ scene }),
+  );
   const icons = scene.primitives.add(new Cesium.BillboardCollection({ scene }));
   const labels = scene.primitives.add(new Cesium.LabelCollection({ scene }));
-  const fleet = new Map(); // hull -> { ship, bb, label, pos }
+  const fleet = new Map(); // hull -> { ship, key, bb, label, pos }
+  let zoom = 1; // zoomScale() of the current camera height
+  const selBB = brackets.add({
+    alignedAxis: Cesium.Cartesian3.UNIT_Z,
+    disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    show: false,
+  });
+  const bracketUris = new Map(); // icon key -> data URI
 
   // ---- panel ---------------------------------------------------------------
   const style = document.createElement('style');
@@ -419,7 +454,6 @@ export function initNavalLayer({
             // heading to show, and a north-pointing hull reads as a map symbol
             // rather than as a track.
             alignedAxis: Cesium.Cartesian3.UNIT_Z,
-            scaleByDistance: new Cesium.NearFarScalar(3e5, 1.35, 1.2e7, 0.45),
             disableDepthTestDistance: Number.POSITIVE_INFINITY,
           }),
           label: labels.add({
@@ -443,8 +477,10 @@ export function initNavalLayer({
         fleet.set(ship.hull, st);
       }
       st.ship = ship;
+      st.key = key;
       st.pos = pos;
-      st.bb.image = iconUri(key);
+      // Each ship carries its own hull number painted on deck.
+      st.bb.image = iconUri(key, hullNumber(ship));
       st.bb.width = width;
       st.bb.height = height;
       st.bb.position = pos;
@@ -465,11 +501,28 @@ export function initNavalLayer({
   function restyle() {
     for (const [hull, st] of fleet) {
       const on = hull === selected;
-      const color = on ? ACCENT : st.ship.stale ? STALE : SHIP;
-      st.bb.color = color;
-      st.bb.scale = on ? 1.3 : 1;
-      st.label.fillColor = color;
+      st.bb.color = st.ship.stale ? ART_STALE : Cesium.Color.WHITE;
+      st.bb.scale = zoom * (on ? 1.25 : 1);
+      // Label clears the hull whatever its current size.
+      const half = (iconSize(st.key).width / 2) * st.bb.scale;
+      st.labelDx = Math.round(half + 8);
+      st.label.pixelOffset = new Cesium.Cartesian2(st.labelDx, 0);
+      st.label.fillColor = on ? ACCENT : st.ship.stale ? STALE : SHIP;
     }
+    const st = selected ? fleet.get(selected) : null;
+    if (!st) {
+      selBB.show = false;
+      return;
+    }
+    const { width, height } = selectionSize(st.key);
+    if (!bracketUris.has(st.key))
+      bracketUris.set(st.key, selectionUri(width, height));
+    selBB.image = bracketUris.get(st.key);
+    selBB.width = width;
+    selBB.height = height;
+    selBB.position = st.pos;
+    selBB.scale = zoom * 1.25;
+    selBB.show = true;
   }
 
   function rebuildRings() {
@@ -498,6 +551,7 @@ export function initNavalLayer({
 
   function applyVisibility() {
     icons.show = prefs.ships;
+    brackets.show = prefs.ships;
     labels.show = prefs.ships;
     rings.show = prefs.ships;
     rebuildRings();
@@ -512,6 +566,11 @@ export function initNavalLayer({
    */
   function declutter() {
     if (disposed || !prefs.ships) return;
+    const z = zoomScale(viewer.camera.positionCartographic.height);
+    if (Math.abs(z - zoom) > 0.01) {
+      zoom = z;
+      restyle();
+    }
     const tooHigh =
       viewer.camera.positionCartographic.height > LABEL_MAX_HEIGHT;
     const canvas = scene.canvas;
@@ -540,8 +599,8 @@ export function initNavalLayer({
     for (const c of cand) {
       const w = c.st.label.text.length * LABEL_CHAR_PX + 12;
       const box = {
-        x0: c.win.x + LABEL_DX - 2,
-        x1: c.win.x + LABEL_DX + w,
+        x0: c.win.x + (c.st.labelDx ?? LABEL_DX) - 2,
+        x1: c.win.x + (c.st.labelDx ?? LABEL_DX) + w,
         y0: c.win.y - LABEL_H / 2,
         y1: c.win.y + LABEL_H / 2,
       };
@@ -660,7 +719,7 @@ export function initNavalLayer({
       for (const s of list) {
         html +=
           `<button class="cd-nv-ship${s.hull === selected ? ' on' : ''}${s.stale ? ' stale' : ''}" data-hull="${esc(s.hull)}">` +
-          `<img alt="" src="${iconUri(iconKey(s))}">` +
+          `<img alt="" src="${iconUri(iconKey(s), hullNumber(s))}">` +
           `<span class="h">${esc(s.hull)}</span><span class="n">${esc(shortName(s))}</span>` +
           `<span class="a">${esc(typeof s.age_days === 'number' ? `${s.age_days}d` : '?')}</span></button>`;
       }
@@ -684,6 +743,7 @@ export function initNavalLayer({
     glyphObserver?.disconnect();
     if (!viewer.isDestroyed?.()) {
       scene.primitives.remove(rings);
+      scene.primitives.remove(brackets);
       scene.primitives.remove(icons);
       scene.primitives.remove(labels);
     }
